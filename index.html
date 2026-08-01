@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f7f4ed">
+  <title>まいにち献立</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="まいにち献立 ホーム">
+        <span class="brand-mark" aria-hidden="true">食</span>
+        <span><strong>まいにち献立</strong><small>わが家の一週間ごはん</small></span>
+      </a>
+      <button class="icon-button" type="button" aria-label="設定">•••</button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">WEEKLY MENU</p>
+          <h1>今週も、<br><em>おいしく気楽に。</em></h1>
+          <p class="hero-text">旬と家にある食材から、わが家にちょうどいい献立を提案します。</p>
+        </div>
+        <div id="hero-art" class="hero-art" role="img" aria-label="夏のごはん">
+          <div class="season-scene"><span class="scene-spark spark-one">✦</span><span class="scene-spark spark-two">●</span><span class="scene-main">🍚</span><span class="scene-side side-one">🌿</span><span class="scene-side side-two">🍅</span><span class="scene-ground"></span></div>
+        </div>
+      </section>
+
+      <section class="condition-card" aria-labelledby="condition-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">YOUR REQUEST</p><h2 id="condition-title">今週の希望</h2></div>
+          <span id="season-chip" class="season-chip">夏の旬</span>
+        </div>
+        <label class="request-field">
+          <span class="sr-only">献立の希望を入力</span>
+          <textarea id="request" rows="2" placeholder="例：豚こまを使いたい。水曜はさっぱりめで。"></textarea>
+          <button id="clear-request" class="clear-input" type="button">クリア</button>
+          <button id="generate" type="button"><span aria-hidden="true">✦</span> 献立をつくる</button>
+        </label>
+        <p id="recognized-days" class="recognized-days" role="status" aria-live="polite" hidden></p>
+        <div class="weekday-tabs" aria-label="希望する曜日">
+          <span>曜日</span>
+          <div>
+            <button type="button" data-request-day="0" aria-pressed="false">日曜</button>
+            <button type="button" data-request-day="1" aria-pressed="false">月曜</button>
+            <button type="button" data-request-day="2" aria-pressed="false">火曜</button>
+            <button type="button" data-request-day="3" aria-pressed="false">水曜</button>
+            <button type="button" data-request-day="4" aria-pressed="false">木曜</button>
+            <button type="button" data-request-day="5" aria-pressed="false">金曜</button>
+            <button type="button" data-request-day="6" aria-pressed="false">土曜</button>
+          </div>
+        </div>
+        <div class="attribute-tabs" aria-label="料理の希望属性">
+          <span>料理の属性</span>
+          <div>
+            <button type="button" data-request-attribute="noodle" aria-pressed="false">麺類</button>
+            <button type="button" data-request-attribute="rice" aria-pressed="false">ご飯類</button>
+            <button type="button" data-request-attribute="western" aria-pressed="false">洋食</button>
+            <button type="button" data-request-attribute="japanese" aria-pressed="false">和食</button>
+            <button type="button" data-request-attribute="chinese" aria-pressed="false">中華</button>
+            <button type="button" data-request-attribute="seasonal" aria-pressed="false">旬</button>
+            <button type="button" data-request-attribute="light" aria-pressed="false">さっぱり</button>
+            <button type="button" data-request-attribute="rich" aria-pressed="false">こってり</button>
+            <button type="button" id="budget-preference" data-request="節約できる献立にしたい" data-preference="budget" aria-pressed="false">節約したい</button>
+          </div>
+        </div>
+        <div class="quick-tags" aria-label="希望の例">
+          <label class="vegetable-preference">
+            <span>冷蔵庫の食材</span>
+            <input id="vegetable-input" type="text" inputmode="text" autocomplete="off" placeholder="例：なす、豚肉、卵" aria-label="優先または除外する食材">
+            <button id="exclude-ingredients" class="exclude-ingredients" type="button" aria-pressed="false">除外</button>
+            <button id="clear-vegetables" type="button" aria-label="冷蔵庫の食材をクリア">クリア</button>
+          </label>
+        </div>
+        <div class="season-picker" aria-label="旬の季節を選択">
+          <span>旬を選ぶ</span>
+          <div id="season-buttons">
+            <button type="button" data-season="spring">春</button><button type="button" class="active" data-season="summer">夏</button><button type="button" data-season="autumn">秋</button><button type="button" data-season="winter">冬</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="weekly" aria-labelledby="weekly-title">
+        <div class="section-heading weekly-heading">
+          <div><p id="weekly-eyebrow" class="eyebrow">THIS WEEK</p><h2 id="weekly-title">今週の献立</h2></div>
+          <div class="weekly-actions">
+            <button id="shopping-button" class="shopping-button" type="button">✓ 買い物リスト</button>
+            <button id="shuffle-partial" class="text-button" type="button">↻ 一部再提案</button>
+            <button id="shuffle-all" class="text-button" type="button">↻ すべて再提案</button>
+          </div>
+        </div>
+        <div class="week-navigation" aria-label="表示する週を切り替え">
+          <button id="previous-week" class="week-arrow" type="button" aria-label="前の週を表示">←</button>
+          <div class="week-navigation-center">
+            <button id="current-week" class="current-week-button" type="button">今週に戻る</button>
+            <button id="lock-weekly-menu" class="lock-weekly-menu" type="button" aria-pressed="false">
+              <span aria-hidden="true">🔓</span> 固定する
+            </button>
+          </div>
+          <button id="next-week" class="week-arrow" type="button" aria-label="次の週を表示">→</button>
+        </div>
+        <div id="menu-list" class="menu-list"></div>
+        <div class="weekly-footer-action">
+          <button id="take-week-off" class="take-week-off" type="button">
+            <span class="take-week-off-sparkle" aria-hidden="true">✦</span>
+            <span>今週は休む</span>
+            <span class="take-week-off-sparkle" aria-hidden="true">✧</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="tip-card" aria-labelledby="season-tip-title">
+        <span class="tip-icon" aria-hidden="true">旬</span>
+        <div class="tip-content">
+          <p class="eyebrow">SEASON'S TIP</p>
+          <h2 id="season-tip-title">夏野菜をおいしく</h2>
+          <p id="season-tip-text" class="tip-description">なすやトマトは油と相性ぴったり。彩りもよく、食欲がない日にもおすすめです。</p>
+          <div id="season-foods" class="season-foods">
+            <p><strong>果物</strong><span>すいか、桃、ぶどう、メロン</span></p>
+            <p><strong>野菜</strong><span>トマト、なす、きゅうり、とうもろこし、オクラ</span></p>
+            <p><strong>魚介類</strong><span>あじ、いわし、すずき、たこ</span></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="メインメニュー">
+      <a class="active" href="#"><span>⌂</span>ホーム</a>
+      <a href="#" id="recipes-nav"><span>▤</span>献立</a>
+      <a href="#" id="shopping-nav"><span>✓</span>買い物</a>
+      <a href="#" id="favorites-nav"><span>♡</span>お気に入り</a>
+    </nav>
+  </div>
+  <dialog id="recipe-dialog" class="app-dialog">
+    <div class="dialog-content" id="recipe-content"></div>
+  </dialog>
+  <dialog id="recipe-edit-dialog" class="app-dialog recipe-edit-dialog">
+    <form id="recipe-edit-form" class="dialog-content">
+      <div class="dialog-head">
+        <div><p class="eyebrow">EDIT RECIPE</p><h2 id="recipe-edit-title">メニューを編集</h2></div>
+        <button class="close-dialog" type="button" aria-label="閉じる">×</button>
+      </div>
+      <p class="dialog-note">変更した内容は、この端末に保存されます。</p>
+      <div class="recipe-edit-fields">
+        <label><span>種類</span><select id="recipe-edit-type"><option value="main">主菜</option><option value="side">副菜</option><option value="soup">汁物</option></select></label>
+        <label><span>季節</span><select id="recipe-edit-season"><option value="spring">春</option><option value="summer">夏</option><option value="autumn">秋</option><option value="winter">冬</option><option value="none">指定なし</option></select></label>
+        <label><span>メニュー名</span><input id="recipe-edit-name" type="text" required></label>
+        <label><span>絵文字</span><input id="recipe-edit-icon" type="text" maxlength="4" placeholder="🍳" required></label>
+        <label><span>調理時間（分）</span><input id="recipe-edit-time" type="number" min="1" required></label>
+        <fieldset class="recipe-attribute-editor full-field">
+          <legend>料理の属性 <small>希望条件に合う献立として優先されます</small></legend>
+          <div>
+            <label><input type="checkbox" value="noodle">麺類</label>
+            <label><input type="checkbox" value="rice">ご飯類</label>
+            <label><input type="checkbox" value="western">洋食</label>
+            <label><input type="checkbox" value="japanese">和食</label>
+            <label><input type="checkbox" value="chinese">中華</label>
+            <label><input type="checkbox" value="seasonal">旬</label>
+            <label><input type="checkbox" value="light">さっぱり</label>
+            <label><input type="checkbox" value="rich">こってり</label>
+          </div>
+        </fieldset>
+        <label class="full-field"><span>材料 <small>1行に「分類｜材料名｜数量｜単位」の順で入力</small></span><textarea id="recipe-edit-ingredients" rows="7" required></textarea></label>
+        <label class="full-field"><span>作り方 <small>1行につき1手順</small></span><textarea id="recipe-edit-steps" rows="6" required></textarea></label>
+      </div>
+      <section class="sauce-editor" aria-labelledby="sauce-editor-title">
+        <div class="sauce-editor-head">
+          <div><p class="eyebrow">SAUCE</p><h3 id="sauce-editor-title">このメニューのたれ</h3></div>
+          <button id="add-sauce" type="button">＋ たれを追加する</button>
+        </div>
+        <div id="sauce-edit-list"></div>
+        <p id="sauce-edit-empty" class="sauce-edit-empty">登録されているたれはありません</p>
+      </section>
+      <div class="recipe-edit-actions">
+        <button id="delete-recipe" type="button">このメニューを削除</button>
+        <button id="cancel-recipe-edit" type="button">キャンセル</button>
+        <button class="save-recipe-edit" type="submit">変更を保存</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="shopping-dialog" class="app-dialog">
+    <div class="dialog-content">
+      <div class="dialog-head"><div><p class="eyebrow">SHOPPING LIST</p><h2>今週の買い物リスト</h2></div><button class="close-dialog" type="button" aria-label="閉じる">×</button></div>
+      <p class="dialog-note">人数に合わせた7日分の目安です。家にあるものはチェックしましょう。</p>
+      <div class="servings-control" aria-label="買い物リストの人数">
+        <span>何人分？</span>
+        <div id="servings-buttons"></div>
+      </div>
+      <div class="estimated-total"><span>参考金額</span><strong id="estimated-total">—</strong><small>食材を必要量で按分した概算です</small></div>
+      <div id="shopping-list" class="shopping-list"></div>
+      <section class="shopping-extras" aria-labelledby="shopping-extras-title">
+        <div class="shopping-extras-head">
+          <div><p class="eyebrow">EXTRAS</p><h3 id="shopping-extras-title">買い足し</h3></div>
+          <small>入力内容は自動で保存されます</small>
+        </div>
+        <div class="extra-shopping-fields">
+          <label><span aria-hidden="true">🍎</span><b>果物</b><input id="shopping-fruit" type="text" autocomplete="off" placeholder="例：りんご、バナナ"></label>
+          <label><span aria-hidden="true">🍮</span><b>甘味</b><input id="shopping-sweets" type="text" autocomplete="off" placeholder="例：プリン、ようかん"></label>
+          <label><span aria-hidden="true">🍺</span><b>酒類</b><input id="shopping-alcohol" type="text" autocomplete="off" placeholder="例：ビール、日本酒"></label>
+        </div>
+        <label class="shopping-memo">
+          <span>メモ帳</span>
+          <textarea id="shopping-memo" rows="4" placeholder="買い忘れや、お店で確認したいことなど"></textarea>
+          <small>週間献立をすべて再提案すると消去されます</small>
+        </label>
+      </section>
+    </div>
+  </dialog>
+  <dialog id="recipes-dialog" class="app-dialog list-dialog">
+    <div class="dialog-content">
+      <div class="dialog-head"><div><p class="eyebrow">ALL RECIPES</p><h2>登録されている献立</h2></div><button class="close-dialog" type="button" aria-label="閉じる">×</button></div>
+      <p id="recipes-note" class="dialog-note">主菜・副菜・汁物を分けてレシピを確認できます。</p>
+      <button id="create-recipe" class="create-recipe-button" type="button">＋ 新しく登録する</button>
+      <div id="recipes-list" class="recipe-collection"></div>
+    </div>
+  </dialog>
+  <dialog id="favorites-dialog" class="app-dialog list-dialog">
+    <div class="dialog-content">
+      <div class="dialog-head"><div><p class="eyebrow">FAVORITES</p><h2>お気に入り</h2></div><button class="close-dialog" type="button" aria-label="閉じる">×</button></div>
+      <p class="dialog-note">お気に入りに登録したメニューです。</p>
+      <div id="favorites-list" class="recipe-collection"></div>
+    </div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="recipes.js"></script>
+  <script src="side-dishes.js"></script>
+  <script src="soups.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
