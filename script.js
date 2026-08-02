@@ -1154,6 +1154,7 @@ function showRecipe(recipe) {
       `<span>${escapeHtml(menuAttributeInfo[attribute]?.label || attribute)}</span>`).join("")}</div>
     <div class="recipe-save-actions">
       <button class="recipe-edit-button" type="button" data-edit-recipe="${recipe.id}" data-recipe-type="${isSoup ? "soup" : isSideDish ? "side" : "main"}">✎ メニューを編集</button>
+      <button class="recipe-delete-button" type="button" data-delete-recipe="${recipe.id}" data-recipe-type="${isSoup ? "soup" : isSideDish ? "side" : "main"}">このメニューを削除</button>
     ${isMainDish ? `
       <button class="favorite-toggle ${isFavorite ? "saved" : ""}" type="button" data-favorite="${recipe.id}">${isFavorite ? "♥ お気に入り登録済み" : "♡ お気に入りに追加"}</button>
       <button class="simple-toggle ${isSimple ? "saved" : ""}" type="button" data-simple="${recipe.id}">${isSimple ? "✓ かんたん登録済み" : "＋ かんたんに登録"}</button>
@@ -1385,13 +1386,12 @@ function adjustSavedWeeksForDeletion(type, deletedIndex) {
   } catch { /* 旧形式の保存データは読み飛ばす */ }
 }
 
-document.querySelector("#delete-recipe").addEventListener("click", () => {
-  if (!editingRecipe || !window.confirm(`「${editingRecipe.main}」を削除しますか？`)) return;
-  const recipe = editingRecipe;
+function deleteRecipe(recipe) {
+  if (!recipe || !window.confirm(`「${recipe.main}」を本当に削除しますか？`)) return false;
   const type = recipe.type === "side" ? "side" : recipe.type === "soup" ? "soup" : "main";
   const collection = recipeSource(type);
   const deletedIndex = collection.findIndex(item => item.id === recipe.id);
-  if (deletedIndex < 0) return;
+  if (deletedIndex < 0) return false;
 
   adjustSavedWeeksForDeletion(type, deletedIndex);
   if (type === "main") {
@@ -1421,10 +1421,16 @@ document.querySelector("#delete-recipe").addEventListener("click", () => {
   localStorage.setItem("consecutiveRecipes", JSON.stringify([...consecutiveIds]));
   saveWeeklyMenu();
   editingRecipe = null;
-  recipeEditDialog.close();
   render();
-  openRecipeList(recipe.season, type);
   notify("メニューを削除しました");
+  return true;
+}
+
+document.querySelector("#delete-recipe").addEventListener("click", () => {
+  const recipe = editingRecipe;
+  if (!deleteRecipe(recipe)) return;
+  recipeEditDialog.close();
+  openRecipeList(recipe.season, recipe.type === "side" ? "side" : recipe.type === "soup" ? "soup" : "main");
 });
 
 recipeEditDialog.addEventListener("close", () => {
@@ -1582,6 +1588,18 @@ document.querySelector("#recipe-content").addEventListener("change", event => {
   });
 });
 document.addEventListener("click", event => {
+  const recipeDeleteButton = event.target.closest("[data-delete-recipe]");
+  if (recipeDeleteButton) {
+    const type = recipeDeleteButton.dataset.recipeType;
+    const recipe = recipeSource(type).find(item => item.id === recipeDeleteButton.dataset.deleteRecipe);
+    if (!deleteRecipe(recipe)) return;
+    const returnContext = recipeReturnContext ? { ...recipeReturnContext } : null;
+    recipeDialog.close();
+    returnContext?.target === "favorites"
+      ? openFavorites(returnContext.season)
+      : openRecipeList(returnContext?.season || recipe.season, returnContext?.recipeType || type);
+    return;
+  }
   const recipeEditButton = event.target.closest("[data-edit-recipe]");
   if (recipeEditButton) {
     const recipe = recipeSource(recipeEditButton.dataset.recipeType)
