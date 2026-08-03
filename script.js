@@ -60,6 +60,7 @@ const now = new Date();
 const currentWeekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
 let visibleWeekStart = new Date(currentWeekStart);
 let weekDates = createWeekDates(visibleWeekStart);
+let mobileDayIndex = now.getDay();
 const todayKey = [now.getFullYear(), now.getMonth(), now.getDate()].join("-");
 const weeklyMenuStorageKey = "weeklyMenu";
 const weeklyMenusStorageKey = "weeklyMenus";
@@ -494,6 +495,32 @@ function cardDateLabel(date) {
   return `${date.getMonth() + 1}/${date.getDate()}${isToday(date) ? "・今日" : ""}`;
 }
 
+function updateMobileDayUI() {
+  const date = weekDates[mobileDayIndex];
+  if (!date) return;
+  document.querySelector("#mobile-day-date").textContent = `${date.getMonth() + 1}月${date.getDate()}日`;
+  document.querySelector("#mobile-day-weekday").textContent = `${days[mobileDayIndex]}曜日${isToday(date) ? "・今日" : ""}`;
+  list.querySelectorAll(".menu-card[data-day-index]").forEach(card => {
+    card.classList.toggle("mobile-day-active", Number(card.dataset.dayIndex) === mobileDayIndex);
+  });
+}
+
+function changeMobileDay(offset) {
+  const nextIndex = mobileDayIndex + offset;
+  if (nextIndex < 0) {
+    mobileDayIndex = 6;
+    changeVisibleWeek(-1);
+    return;
+  }
+  if (nextIndex > 6) {
+    mobileDayIndex = 0;
+    changeVisibleWeek(1);
+    return;
+  }
+  mobileDayIndex = nextIndex;
+  updateMobileDayUI();
+}
+
 function updateWeeklyDateUI() {
   const start = weekDates[0];
   const end = weekDates[6];
@@ -559,6 +586,7 @@ function render() {
   takeWeekOffButton.disabled = weeklyMenuLocked || allDaysOff;
   takeWeekOffButton.setAttribute("aria-pressed", String(allDaysOff));
   list.classList.toggle("all-days-off-view", allDaysOff);
+  document.querySelector("#mobile-day-navigation").hidden = allDaysOff;
   if (allDaysOff) {
     list.innerHTML = `<div class="all-days-off-stage">
       <div class="all-days-off-decor decor-left" aria-hidden="true">
@@ -591,7 +619,7 @@ function render() {
     const today = isToday(date);
     const isEatingOut = menuIndex === null;
     if (isEatingOut) {
-      return `<article class="menu-card eating-out ${today ? "today" : ""}">
+      return `<article class="menu-card eating-out ${today ? "today" : ""}" data-day-index="${index}">
         <div class="day-row"><span class="day">${days[index]}</span><span class="date">${cardDateLabel(date)}</span></div>
         <div class="eating-out-blank" aria-label="外食・サボり日">
           <span aria-hidden="true">☕</span>
@@ -606,7 +634,7 @@ function render() {
     const soupIndex = selectedSoups[index];
     const sideDish = sideDishIndex === null ? null : sideDishes[sideDishIndex];
     const soup = soupIndex === null ? null : soups[soupIndex];
-    return `<article class="menu-card ${today ? "today" : ""}">
+    return `<article class="menu-card ${today ? "today" : ""}" data-day-index="${index}">
       <div class="day-row"><span class="day">${days[index]}</span><span class="date">${cardDateLabel(date)}</span></div>
       <button class="recipe-open" type="button" data-recipe="${menuIndex}" aria-label="${escapeHtml(menu.main)}のレシピを見る">
         <div class="dish-icon season-${menu.season}" aria-hidden="true">${menu.icon}</div>
@@ -630,6 +658,7 @@ function render() {
       <button class="eating-out-button" type="button" data-eating-out-index="${index}" ${weeklyMenuLocked ? "disabled" : ""}>☕ 外食・サボり日にする</button>
     </article>`;
   }).join("");
+  updateMobileDayUI();
 }
 
 function renderKeepingScrollPosition() {
@@ -1903,6 +1932,23 @@ document.querySelectorAll("[data-request]").forEach(button => {
 
 document.querySelector("#previous-week").addEventListener("click", () => changeVisibleWeek(-1));
 document.querySelector("#next-week").addEventListener("click", () => changeVisibleWeek(1));
+document.querySelector("#previous-day").addEventListener("click", () => changeMobileDay(-1));
+document.querySelector("#next-day").addEventListener("click", () => changeMobileDay(1));
+
+let mobileSwipeStart = null;
+list.addEventListener("touchstart", event => {
+  const touch = event.changedTouches[0];
+  mobileSwipeStart = { x: touch.clientX, y: touch.clientY };
+}, { passive: true });
+list.addEventListener("touchend", event => {
+  if (!mobileSwipeStart || !window.matchMedia("(max-width: 768px)").matches) return;
+  const touch = event.changedTouches[0];
+  const deltaX = touch.clientX - mobileSwipeStart.x;
+  const deltaY = touch.clientY - mobileSwipeStart.y;
+  mobileSwipeStart = null;
+  if (Math.abs(deltaX) < 55 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+  changeMobileDay(deltaX < 0 ? 1 : -1);
+}, { passive: true });
 document.querySelector("#lock-weekly-menu").addEventListener("click", () => {
   saveVisibleWeekLock(!weeklyMenuLocked);
   updateWeeklyLockUI();

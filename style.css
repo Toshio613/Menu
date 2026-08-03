@@ -112,6 +112,7 @@ textarea::placeholder { color: #99a198; }
 .lock-weekly-menu.locked { color: white; background: var(--green); box-shadow: 0 4px 12px rgba(41,55,47,.18); }
 .weekly button:disabled { opacity: .42; cursor: not-allowed; }
 .week-navigation button:disabled { opacity: 1; cursor: pointer; }
+.mobile-day-navigation { display: none; }
 .dish-slot .remove-dish:disabled { color: #adb2ac; background: rgba(255,255,255,.82); cursor: not-allowed; }
 .menu-list { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; overflow-anchor: none; }
 .weekly-footer-action { display: flex; justify-content: flex-end; margin-top: 18px; }
@@ -403,8 +404,39 @@ textarea::placeholder { color: #99a198; }
   .recipe-edit-actions { grid-template-columns: 1fr; }
   .servings-control { display: block; }.servings-control > span { display: block; margin-bottom: 9px; }.servings-control > div { justify-content: space-between; }.servings-control button { flex: 1; }
 }
+@media (max-width: 768px) {
+  main { padding-bottom: calc(132px + env(safe-area-inset-bottom)); }
+  .weekly { margin-right: max(10px, env(safe-area-inset-right)); margin-left: max(10px, env(safe-area-inset-left)); padding-bottom: 24px; }
+  .week-navigation { margin-bottom: 10px; }
+  .mobile-day-navigation { display: grid; grid-template-columns: 52px minmax(0, 1fr) 52px; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px; background: var(--sage); border-radius: 16px; }
+  .mobile-day-navigation[hidden] { display: none; }
+  .mobile-day-navigation > div { min-width: 0; text-align: center; }
+  .mobile-day-navigation strong, .mobile-day-navigation span { display: block; }
+  .mobile-day-navigation strong { font: 500 clamp(23px, 7vw, 30px) "Kiwi Maru", serif; line-height: 1.25; }
+  .mobile-day-navigation span { margin-top: 3px; color: var(--green-dark); font-size: 14px; font-weight: 700; }
+  .mobile-day-navigation button { display: grid; place-items: center; width: 52px; height: 52px; padding: 0; color: white; background: var(--green); border: 0; border-radius: 50%; font-size: 23px; cursor: pointer; }
+  .mobile-day-navigation button:disabled { color: #a6aea7; background: rgba(255,255,255,.62); cursor: default; }
+  .menu-list { display: block; width: 100%; margin: 0; padding: 0; overflow: hidden; touch-action: pan-y; }
+  .menu-list .menu-card { display: none; width: 100%; margin: 0; padding: 20px 18px 22px; border-radius: 18px; }
+  .menu-list .menu-card.mobile-day-active { display: block; animation: mobile-day-in .2s ease-out; }
+  .menu-list .menu-card.eating-out.mobile-day-active { display: flex; }
+  .menu-card .day-row { display: none; }
+  .menu-card .recipe-open { min-height: 118px; padding: 14px; background: #f8f7f1; border-radius: 14px; }
+  .menu-card .dish-icon { width: 58px; height: 58px; margin-bottom: 10px; font-size: 30px; }
+  .menu-card .dish-kind { margin-bottom: 5px; font-size: 11px; }
+  .menu-card h3 { min-height: 0; margin-bottom: 7px; font-size: clamp(18px, 5.2vw, 22px); line-height: 1.55; word-break: keep-all; overflow-wrap: break-word; }
+  .menu-card .detail-link { font-size: 12px; }
+  .menu-card .side-dish-open, .menu-card .soup-open, .menu-card .removed-dish { min-height: 68px; padding: 13px 48px 13px 14px; border-radius: 12px; }
+  .menu-card .side-dish-open strong, .menu-card .soup-open strong { font-size: 16px; line-height: 1.55; word-break: keep-all; overflow-wrap: break-word; }
+  .menu-card .retry, .menu-card .simple-retry, .menu-card .favorite-retry, .menu-card .eating-out-button { min-height: 48px; margin-top: 9px; padding: 10px 12px; font-size: 13px; }
+  .menu-card .retry { margin-top: 16px; }
+  .dish-slot .remove-dish { top: 22px; right: 10px; width: 36px; height: 36px; min-height: 36px; font-size: 20px; }
+  .eating-out-blank { min-height: 300px; }
+  .weekly-footer-action { margin-bottom: 12px; }
+  .bottom-nav { right: max(8px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); left: max(8px, env(safe-area-inset-left)); width: auto; transform: none; }
+  @keyframes mobile-day-in { from { opacity: .35; transform: translateX(10px); } }
+}
 @media (max-width: 374px) {
-  .menu-list { grid-template-columns: 1fr; }
   .brand small { display: none; }
   .week-navigation-center { display: grid; }
 }
