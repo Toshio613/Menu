@@ -112,7 +112,7 @@ textarea::placeholder { color: #99a198; }
 .lock-weekly-menu.locked { color: white; background: var(--green); box-shadow: 0 4px 12px rgba(41,55,47,.18); }
 .weekly button:disabled { opacity: .42; cursor: not-allowed; }
 .week-navigation button:disabled { opacity: 1; cursor: pointer; }
-.mobile-day-navigation { display: none; }
+.mobile-day-navigation, .mobile-week-overview { display: none; }
 .dish-slot .remove-dish:disabled { color: #adb2ac; background: rgba(255,255,255,.82); cursor: not-allowed; }
 .menu-list { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; overflow-anchor: none; }
 .weekly-footer-action { display: flex; justify-content: flex-end; margin-top: 18px; }
@@ -408,6 +408,19 @@ textarea::placeholder { color: #99a198; }
   main { padding-bottom: calc(132px + env(safe-area-inset-bottom)); }
   .weekly { margin-right: max(10px, env(safe-area-inset-right)); margin-left: max(10px, env(safe-area-inset-left)); padding-bottom: 24px; }
   .week-navigation { margin-bottom: 10px; }
+  .mobile-week-overview { display: block; margin: 0 0 12px; padding: 12px 10px 10px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 22px rgba(48,66,54,.06); }
+  .mobile-week-overview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+  .mobile-week-overview-head h3 { margin: 0; font: 500 15px "Kiwi Maru", serif; }
+  .mobile-week-overview-head span { color: var(--green); font-size: 11px; font-weight: 700; }
+  .mobile-week-days { display: flex; gap: 6px; width: 100%; padding: 1px 0 4px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .mobile-week-days::-webkit-scrollbar { display: none; }
+  .mobile-week-days button { flex: 0 0 74px; min-width: 74px; min-height: 116px; padding: 7px 5px 6px; overflow: hidden; color: var(--ink); background: #faf9f4; border: 1px solid var(--line); border-radius: 10px; scroll-snap-align: start; cursor: pointer; }
+  .mobile-week-days button.active { background: var(--sage); border: 2px solid var(--green); box-shadow: 0 4px 10px rgba(49,83,65,.12); }
+  .mobile-weekday, .mobile-week-date, .mobile-week-icon, .mobile-week-name { display: block; }
+  .mobile-weekday { font: 600 14px "Kiwi Maru", serif; }
+  .mobile-week-date { margin-top: 2px; color: var(--green-dark); font-size: 10px; font-weight: 700; }
+  .mobile-week-icon { margin: 7px 0 5px; font-size: 25px; line-height: 1; }
+  .mobile-week-name { overflow: hidden; font-size: 10px; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-day-navigation { display: grid; grid-template-columns: 52px minmax(0, 1fr) 52px; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px; background: var(--sage); border-radius: 16px; }
   .mobile-day-navigation[hidden] { display: none; }
   .mobile-day-navigation > div { min-width: 0; text-align: center; }

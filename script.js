@@ -495,6 +495,23 @@ function cardDateLabel(date) {
   return `${date.getMonth() + 1}/${date.getDate()}${isToday(date) ? "・今日" : ""}`;
 }
 
+function renderMobileWeekOverview() {
+  const start = weekDates[0];
+  const end = weekDates[6];
+  document.querySelector("#mobile-week-range").textContent = `${start.getMonth() + 1}/${start.getDate()}〜${end.getMonth() + 1}/${end.getDate()}`;
+  document.querySelector("#mobile-week-days").innerHTML = selected.map((menuIndex, index) => {
+    const date = weekDates[index];
+    const menu = menuIndex === null ? null : menus[menuIndex];
+    const name = menu?.main || "外食・サボり日";
+    return `<button type="button" role="tab" data-mobile-day="${index}" aria-label="${date.getMonth() + 1}月${date.getDate()}日 ${days[index]}曜日 ${escapeHtml(name)}">
+      <span class="mobile-weekday">${days[index]}</span>
+      <span class="mobile-week-date">${date.getMonth() + 1}/${date.getDate()}</span>
+      <span class="mobile-week-icon" aria-hidden="true">${menu?.icon || "☕"}</span>
+      <span class="mobile-week-name">${escapeHtml(name)}</span>
+    </button>`;
+  }).join("");
+}
+
 function updateMobileDayUI() {
   const date = weekDates[mobileDayIndex];
   if (!date) return;
@@ -503,6 +520,20 @@ function updateMobileDayUI() {
   list.querySelectorAll(".menu-card[data-day-index]").forEach(card => {
     card.classList.toggle("mobile-day-active", Number(card.dataset.dayIndex) === mobileDayIndex);
   });
+  document.querySelectorAll("[data-mobile-day]").forEach(button => {
+    const active = Number(button.dataset.mobileDay) === mobileDayIndex;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
+  if (window.matchMedia("(max-width: 768px)").matches) {
+    const overview = document.querySelector("#mobile-week-days");
+    const activeButton = overview.querySelector("[data-mobile-day].active");
+    if (activeButton) {
+      const targetLeft = activeButton.offsetLeft - (overview.clientWidth - activeButton.offsetWidth) / 2;
+      overview.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
+    }
+  }
 }
 
 function changeMobileDay(offset) {
@@ -581,6 +612,7 @@ function scheduleDateRollover() {
 
 function render() {
   updateWeeklyLockUI();
+  renderMobileWeekOverview();
   const allDaysOff = selected.length === 7 && selected.every(menuIndex => menuIndex === null);
   const takeWeekOffButton = document.querySelector("#take-week-off");
   takeWeekOffButton.disabled = weeklyMenuLocked || allDaysOff;
@@ -1934,6 +1966,12 @@ document.querySelector("#previous-week").addEventListener("click", () => changeV
 document.querySelector("#next-week").addEventListener("click", () => changeVisibleWeek(1));
 document.querySelector("#previous-day").addEventListener("click", () => changeMobileDay(-1));
 document.querySelector("#next-day").addEventListener("click", () => changeMobileDay(1));
+document.querySelector("#mobile-week-days").addEventListener("click", event => {
+  const button = event.target.closest("[data-mobile-day]");
+  if (!button) return;
+  mobileDayIndex = Number(button.dataset.mobileDay);
+  updateMobileDayUI();
+});
 
 let mobileSwipeStart = null;
 list.addEventListener("touchstart", event => {
