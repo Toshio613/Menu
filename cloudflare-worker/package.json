@@ -5,9 +5,12 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "wrangler deploy --dry-run"
+    "check": "wrangler deploy --dry-run",
+    "lint": "eslint .. --config ../eslint.config.js",
+    "test": "node --test"
   },
   "devDependencies": {
+    "eslint": "^9.35.0",
     "wrangler": "^4.36.0"
   }
 }

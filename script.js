@@ -14,6 +14,8 @@ import {
 } from "./js/shopping-list.js";
 import { APP_CONFIG } from "./js/app-config.js";
 import { initializeRecipePhoto, resetRecipePhotoUI } from "./js/recipe-photo.js";
+import { initializeFamilySharing } from "./js/family-sharing.js";
+import { recipeRepository } from "./js/recipe-repository.js";
 
 const menus = RECIPES;
 const sideDishes = SIDE_DISHES;
@@ -169,6 +171,30 @@ function initialSoupSelection() {
   return [...seasonal, ...regular.slice(0, 2)];
 }
 let selectedSoups = initialSoupSelection();
+
+function selectedRecipeIds(selection, recipes) {
+  return selection.map(index => Number.isInteger(index) ? recipes[index]?.id || null : null);
+}
+
+function indicesForRecipeIds(ids, recipes) {
+  return ids.map(id => id ? recipes.findIndex(recipe => recipe.id === id) : null)
+    .map(index => index === -1 ? null : index);
+}
+
+function applySharedRecipes(sharedRecipes) {
+  const mainIds = selectedRecipeIds(selected, menus);
+  const sideIds = selectedRecipeIds(selectedSides, sideDishes);
+  const soupIds = selectedRecipeIds(selectedSoups, soups);
+  menus.splice(0, menus.length, ...sharedRecipes.filter(recipe => !recipe.type));
+  sideDishes.splice(0, sideDishes.length, ...sharedRecipes.filter(recipe => recipe.type === "side"));
+  soups.splice(0, soups.length, ...sharedRecipes.filter(recipe => recipe.type === "soup"));
+  selected = indicesForRecipeIds(mainIds, menus);
+  selectedSides = indicesForRecipeIds(sideIds, sideDishes);
+  selectedSoups = indicesForRecipeIds(soupIds, soups);
+  additionalSideIds = additionalSideIds.map(ids => ids.filter(id => sideDishes.some(recipe => recipe.id === id)));
+  saveWeeklyMenu();
+  render();
+}
 
 function isValidWeeklySelection(selection, recipes) {
   return Array.isArray(selection)
@@ -1282,7 +1308,7 @@ document.querySelector("#sauce-edit-list").addEventListener("click", event => {
   renderSauceEditor();
 });
 
-document.querySelector("#recipe-edit-form").addEventListener("submit", event => {
+document.querySelector("#recipe-edit-form").addEventListener("submit", async event => {
   event.preventDefault();
   if (!editingRecipe && !creatingRecipe) return;
   const ingredients = parseEditedIngredients(document.querySelector("#recipe-edit-ingredients").value);
@@ -1312,7 +1338,8 @@ document.querySelector("#recipe-edit-form").addEventListener("submit", event => 
   const confidenceValue = document.querySelector("#recipe-edit-confidence").value;
   const confidence = Number(confidenceValue);
   if (confidenceValue !== "" && Number.isFinite(confidence) && confidence >= 0 && confidence <= 100) updated.confidence = confidence;
-  if (creatingRecipe) {
+  const isCreating = creatingRecipe;
+  if (isCreating) {
     const type = document.querySelector("#recipe-edit-type").value;
     const id = `custom-${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     editingRecipe = {
@@ -1321,25 +1348,48 @@ document.querySelector("#recipe-edit-form").addEventListener("submit", event => 
       ...updated,
       isCustom: true
     };
-    recipeSource(type).push(editingRecipe);
     updated.id = id;
     updated.type = type;
     updated.isCustom = true;
-    creatingRecipe = false;
   }
   if (editingRecipe.isCustom) {
     updated.id = editingRecipe.id;
     updated.type = editingRecipe.type === "side" ? "side" : editingRecipe.type === "soup" ? "soup" : "main";
     updated.isCustom = true;
   }
+  const recipeToSave = { ...editingRecipe, ...updated };
+  const saveButton = event.currentTarget.querySelector('[type="submit"]');
+  if (recipeRepository.isAuthenticated()) {
+    saveButton.disabled = true;
+    saveButton.textContent = "共有へ保存中…";
+    try {
+      if (isCreating) await recipeRepository.create(recipeToSave);
+      else await recipeRepository.update(recipeToSave);
+    } catch (error) {
+      notify(error.message || "共有レシピを保存できませんでした");
+      return;
+    } finally {
+      saveButton.disabled = false;
+      saveButton.textContent = "変更を保存";
+    }
+  }
   Object.assign(editingRecipe, updated);
+  if (isCreating) {
+    recipeSource(updated.type).push(editingRecipe);
+    creatingRecipe = false;
+  }
   menuEdits[editingRecipe.id] = updated;
   const validSauceIds = new Set(updated.sauces.map(sauce => sauce.id));
   if (selectedSauces[editingRecipe.id] && !validSauceIds.has(selectedSauces[editingRecipe.id])) {
     delete selectedSauces[editingRecipe.id];
     localStorage.setItem(selectedSaucesStorageKey, JSON.stringify(selectedSauces));
   }
-  localStorage.setItem(menuEditsStorageKey, JSON.stringify(menuEdits));
+  if (recipeRepository.isAuthenticated()) {
+    delete menuEdits[editingRecipe.id];
+    localStorage.removeItem(menuEditsStorageKey);
+  } else {
+    localStorage.setItem(menuEditsStorageKey, JSON.stringify(menuEdits));
+  }
   const savedRecipeType = editingRecipe.type === "side" ? "side" : editingRecipe.type === "soup" ? "soup" : "main";
   recipeReturnContext = {
     target: recipeReturnContext?.target || "recipes",
@@ -1384,12 +1434,19 @@ function adjustSavedWeeksForDeletion(type, deletedIndex) {
   } catch { /* 旧形式の保存データは読み飛ばす */ }
 }
 
-function deleteRecipe(recipe) {
+async function deleteRecipe(recipe) {
   if (!recipe || !window.confirm(`「${recipe.main}」を本当に削除しますか？`)) return false;
   const type = recipe.type === "side" ? "side" : recipe.type === "soup" ? "soup" : "main";
   const collection = recipeSource(type);
   const deletedIndex = collection.findIndex(item => item.id === recipe.id);
   if (deletedIndex < 0) return false;
+  if (recipeRepository.isAuthenticated()) {
+    try { await recipeRepository.delete(recipe.id); }
+    catch (error) {
+      notify(error.message || "共有レシピを削除できませんでした");
+      return false;
+    }
+  }
 
   adjustSavedWeeksForDeletion(type, deletedIndex);
   if (type === "main") {
@@ -1411,9 +1468,14 @@ function deleteRecipe(recipe) {
   favoriteIds.delete(recipe.id);
   simpleIds.delete(recipe.id);
   consecutiveIds.delete(recipe.id);
-  localStorage.setItem(menuEditsStorageKey, JSON.stringify(menuEdits));
+  if (recipeRepository.isAuthenticated()) {
+    localStorage.removeItem(menuEditsStorageKey);
+    localStorage.removeItem(deletedRecipesStorageKey);
+  } else {
+    localStorage.setItem(menuEditsStorageKey, JSON.stringify(menuEdits));
+    localStorage.setItem(deletedRecipesStorageKey, JSON.stringify(deletedRecipeIds));
+  }
   localStorage.setItem(selectedSaucesStorageKey, JSON.stringify(selectedSauces));
-  localStorage.setItem(deletedRecipesStorageKey, JSON.stringify(deletedRecipeIds));
   localStorage.setItem("favoriteRecipes", JSON.stringify([...favoriteIds]));
   localStorage.setItem("simpleRecipes", JSON.stringify([...simpleIds]));
   localStorage.setItem("consecutiveRecipes", JSON.stringify([...consecutiveIds]));
@@ -1424,9 +1486,9 @@ function deleteRecipe(recipe) {
   return true;
 }
 
-document.querySelector("#delete-recipe").addEventListener("click", () => {
+document.querySelector("#delete-recipe").addEventListener("click", async () => {
   const recipe = editingRecipe;
-  if (!deleteRecipe(recipe)) return;
+  if (!await deleteRecipe(recipe)) return;
   recipeEditDialog.close();
   openRecipeList(recipe.season, recipe.type === "side" ? "side" : recipe.type === "soup" ? "soup" : "main");
 });
@@ -1638,12 +1700,12 @@ document.querySelector("#recipe-content").addEventListener("change", event => {
     localStorage.setItem(storageKey, event.target.value);
   });
 });
-document.addEventListener("click", event => {
+document.addEventListener("click", async event => {
   const recipeDeleteButton = event.target.closest("[data-delete-recipe]");
   if (recipeDeleteButton) {
     const type = recipeDeleteButton.dataset.recipeType;
     const recipe = recipeSource(type).find(item => item.id === recipeDeleteButton.dataset.deleteRecipe);
-    if (!deleteRecipe(recipe)) return;
+    if (!await deleteRecipe(recipe)) return;
     const returnContext = recipeReturnContext ? { ...recipeReturnContext } : null;
     recipeDialog.close();
     returnContext?.target === "favorites"
@@ -2015,6 +2077,12 @@ initializeRecipePhoto({
       .filter(Boolean)
       .join("\n");
   }
+});
+
+initializeFamilySharing({
+  getLocalRecipes: () => [...menus, ...sideDishes, ...soups],
+  applySharedRecipes,
+  onReady: () => notify("家族の共有レシピと同期しました")
 });
 
 document.querySelector("#request").value = localStorage.getItem("menuRequest") || "";

@@ -1,9 +1,9 @@
 import { APP_CONFIG } from "./app-config.js";
+import { apiRequest, getClientId } from "./api-client.js";
 
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 let selectedFile = null;
 let previewUrl = null;
-let activeController = null;
 let analyzing = false;
 
 function photoElements() {
@@ -40,8 +40,6 @@ function releasePreview() {
 }
 
 export function resetRecipePhotoUI(enabled = true) {
-  activeController?.abort();
-  activeController = null;
   analyzing = false;
   selectedFile = null;
   releasePreview();
@@ -106,16 +104,6 @@ export async function compressRecipePhoto(file, config = APP_CONFIG.recipePhoto)
   return blob;
 }
 
-function clientId() {
-  const storageKey = "recipePhotoClientId";
-  let id = localStorage.getItem(storageKey);
-  if (!id) {
-    id = crypto.randomUUID?.() || `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(storageKey, id);
-  }
-  return id;
-}
-
 function errorMessage(error) {
   const messages = {
     NO_IMAGE: "写真を選択してください。",
@@ -146,29 +134,18 @@ export function validateRecipeResult(value) {
 }
 
 async function requestAnalysis(blob, config) {
-  if (!config.apiUrl) throw new Error("API_URL_MISSING");
-  activeController = new AbortController();
-  const timeout = setTimeout(() => activeController.abort("timeout"), config.timeoutMs);
   const body = new FormData();
   body.append("image", blob, "recipe.jpg");
   body.append("model", config.model);
-  body.append("feature", "recipe-photo");
-  body.append("clientId", clientId());
+  body.append("clientId", getClientId());
   try {
-    const response = await fetch(config.apiUrl, { method: "POST", body, signal: activeController.signal });
-    let payload = null;
-    try { payload = await response.json(); } catch { throw new Error("INVALID_RESPONSE"); }
-    if (response.status === 429) throw new Error("RATE_LIMITED");
-    if (response.status === 422) throw new Error("NOT_A_RECIPE");
-    if (!response.ok) throw new Error(payload?.error?.code || "ANALYSIS_FAILED");
+    const payload = await apiRequest("/api/analyze-recipe", { method: "POST", body, auth: false, timeoutMs: config.timeoutMs });
     if (!validateRecipeResult(payload.recipe)) throw new Error("INVALID_RESPONSE");
     return payload.recipe;
   } catch (error) {
-    if (error.name === "AbortError" || activeController?.signal.aborted) throw new Error("TIMEOUT");
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-    activeController = null;
+    if (error.status === 429) throw new Error("RATE_LIMITED");
+    if (error.status === 422) throw new Error("NOT_A_RECIPE");
+    throw new Error(error.code || error.message);
   }
 }
 

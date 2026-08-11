@@ -23,7 +23,7 @@
         <span class="brand-mark" aria-hidden="true">食</span>
         <span><strong>まいにち献立</strong><small>わが家の一週間ごはん</small></span>
       </a>
-      <button class="icon-button" type="button" aria-label="設定">•••</button>
+      <button id="family-share-button" class="family-share-button" type="button">家族共有</button>
     </header>
 
     <main>
@@ -167,7 +167,7 @@
         <div><p class="eyebrow">EDIT RECIPE</p><h2 id="recipe-edit-title">メニューを編集</h2></div>
         <button class="close-dialog" type="button" aria-label="閉じる">×</button>
       </div>
-      <p class="dialog-note">変更した内容は、この端末に保存されます。</p>
+      <p class="dialog-note">家族ログイン中は共有レシピへ保存されます。未ログイン時はこの端末に保存されます。</p>
       <input id="recipe-edit-confidence" type="hidden" value="">
       <section id="recipe-photo-panel" class="recipe-photo-panel" aria-labelledby="recipe-photo-title" hidden>
         <div class="recipe-photo-head">
@@ -271,6 +271,18 @@
       <p class="dialog-note">お気に入りに登録したメニューです。</p>
       <div id="favorites-list" class="recipe-collection"></div>
     </div>
+  </dialog>
+  <dialog id="family-login-dialog" class="app-dialog family-login-dialog">
+    <form id="family-login-form" class="dialog-content">
+      <div class="dialog-head">
+        <div><p class="eyebrow">FAMILY SHARE</p><h2>家族共有にログイン</h2></div>
+        <button id="cancel-family-login" class="close-dialog" type="button" aria-label="閉じる">×</button>
+      </div>
+      <p class="dialog-note">家族共通パスワードでログインすると、全員が同じレシピを利用できます。</p>
+      <label class="family-password-field"><span>家族パスワード</span><input id="family-password" type="password" autocomplete="current-password" required></label>
+      <p id="family-login-status" class="family-login-status" role="status" aria-live="polite" hidden></p>
+      <button class="family-login-submit" type="submit">ログインして同期</button>
+    </form>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script type="module" src="script.js"></script>
