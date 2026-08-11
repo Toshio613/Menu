@@ -1340,6 +1340,12 @@ document.querySelector("#recipe-edit-form").addEventListener("submit", event => 
     localStorage.setItem(selectedSaucesStorageKey, JSON.stringify(selectedSauces));
   }
   localStorage.setItem(menuEditsStorageKey, JSON.stringify(menuEdits));
+  const savedRecipeType = editingRecipe.type === "side" ? "side" : editingRecipe.type === "soup" ? "soup" : "main";
+  recipeReturnContext = {
+    target: recipeReturnContext?.target || "recipes",
+    season: updated.season,
+    recipeType: savedRecipeType
+  };
   render();
   recipeEditDialog.close();
   notify("メニューの変更を保存しました");
