@@ -23,3 +23,5 @@ index.htmlを開く
 写真からのレシピ入力
 
 `js/app-config.js` の `apiUrl` にはCloudflare Workerの料理写真解析エンドポイントを設定します。APIキーはフロントエンドへ記載せず、Cloudflare Workerの `OPENAI_API_KEY` Secretへ登録します。
+
+現在の解析API: `https://menu-pic.l-18mg169henapp.workers.dev/api/analyze-recipe`
