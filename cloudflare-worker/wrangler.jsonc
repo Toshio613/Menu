@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "menu-recipe-ai",
+  "name": "menu-pic",
   "main": "src/index.js",
   "compatibility_date": "2026-08-01",
   "vars": {
