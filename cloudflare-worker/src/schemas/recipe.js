@@ -11,7 +11,6 @@ export const recipeSchema = {
     icon: { type: "string", minLength: 1, maxLength: 8 },
     attributes: {
       type: "array",
-      uniqueItems: true,
       maxItems: 5,
       items: { type: "string", enum: ["noodle", "rice", "western", "japanese", "chinese", "seasonal", "light", "rich"] }
     },
