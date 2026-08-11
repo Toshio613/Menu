@@ -22,4 +22,4 @@ index.htmlを開く
 
 写真からのレシピ入力
 
-外部設定が完了するまでは `js/app-config.js` の `apiUrl` を空欄にしておきます。APIキーはフロントエンドへ記載せず、Cloudflare Workerの `OPENAI_API_KEY` Secretへ登録します。
+`js/app-config.js` の `apiUrl` にはCloudflare Workerの料理写真解析エンドポイントを設定します。APIキーはフロントエンドへ記載せず、Cloudflare Workerの `OPENAI_API_KEY` Secretへ登録します。

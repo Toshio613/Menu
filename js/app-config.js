@@ -1,6 +1,6 @@
 export const APP_CONFIG = Object.freeze({
   recipePhoto: Object.freeze({
-    apiUrl: "",
+    apiUrl: "https://menu-pic.l-18mg169henapp.workers.dev/api/analyze-recipe",
     model: "gpt-5.6-luna",
     timeoutMs: 45_000,
     maxSourceBytes: 15 * 1024 * 1024,
