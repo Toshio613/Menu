@@ -142,6 +142,9 @@ textarea::placeholder { color: #99a198; }
 .decor-right span:nth-child(5) { top: 67%; right: 2%; transform: rotate(30deg) scale(.92); }
 .decor-right span:nth-child(6) { bottom: 13%; left: 2%; transform: rotate(-8deg) scale(.66); }
 .decor-right span:nth-child(7) { bottom: 1%; right: 29%; transform: rotate(16deg) scale(1.12); }
+.decor-right .kabutomushi { top: 42%; right: 7%; width: 1.25em; height: 1.7em; transform: rotate(24deg); }
+.kabutomushi svg { display: block; width: 100%; height: 100%; overflow: visible; fill: #6f3c22; stroke: #4a281b; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.kabutomushi path { fill: none; }
 .all-days-off-panel { width: 100%; overflow: hidden; background: #171411; border-right: 1px solid var(--line); border-left: 1px solid var(--line); }
 .all-days-off-image { position: relative; }
 .all-days-off-panel img { display: block; width: 100%; max-height: none; object-fit: contain; object-position: center; }
@@ -255,6 +258,20 @@ textarea::placeholder { color: #99a198; }
 .seasonal-sashimi-tip { margin: 18px 0 4px; padding: 15px 16px; color: var(--green-dark); background: #f3f6ef; border: 1px solid #dce4d7; border-radius: 14px; font-size: 12px; line-height: 1.7; }
 .seasonal-sashimi-tip strong { display: block; margin-bottom: 3px; color: var(--orange); font: 500 14px "Kiwi Maru", serif; }
 .recipe-edit-fields { display: grid; grid-template-columns: 1fr 150px; gap: 14px; }
+.recipe-photo-panel { margin: -6px 0 22px; padding: 16px; background: #f3f6ef; border: 1px solid #d6e2d7; border-radius: 14px; }
+.recipe-photo-panel[hidden] { display: none; }
+.recipe-photo-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.recipe-photo-head h3 { margin: 2px 0 0; font: 500 17px "Kiwi Maru", serif; }
+.recipe-photo-head button, .recipe-photo-preview button { min-height: 44px; padding: 10px 14px; color: white; background: var(--green); border: 0; border-radius: 11px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.recipe-photo-head button:disabled, .recipe-photo-preview button:disabled { opacity: .55; cursor: wait; }
+.recipe-photo-preview { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 13px; margin-top: 14px; }
+.recipe-photo-preview[hidden] { display: none; }
+.recipe-photo-preview img { display: block; width: 96px; height: 96px; object-fit: cover; background: white; border: 1px solid var(--line); border-radius: 12px; }
+.recipe-photo-caution { margin: 12px 0 0; color: var(--muted); font-size: 10px; line-height: 1.7; }
+.recipe-photo-status { margin: 11px 0 0; padding: 10px 12px; color: var(--green-dark); background: white; border-radius: 9px; font-size: 11px; line-height: 1.65; }
+.recipe-photo-status[data-state="error"] { color: #9b463d; background: #fff0ed; }
+.recipe-photo-status[data-state="loading"] { color: #6f648f; background: #f2eff8; }
+.recipe-photo-status[data-state="success"] { color: var(--green-dark); background: #e7f2e8; }
 .recipe-edit-fields label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .recipe-edit-fields label > span small { display: block; margin-top: 3px; font-weight: 400; }
 .recipe-edit-fields .full-field { grid-column: 1 / -1; }
@@ -282,6 +299,23 @@ textarea::placeholder { color: #99a198; }
 #delete-recipe[hidden] { display: none; }
 .save-recipe-edit { color: white; background: var(--green); border: 1px solid var(--green); }
 .create-recipe-button { width: 100%; min-height: 48px; margin: -8px 0 18px; color: white; background: var(--green); border: 0; border-radius: 12px; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 5px 14px rgba(41,55,47,.15); }
+.add-side-dish-button { width: 100%; min-height: 38px; margin-top: 7px; padding: 7px; color: var(--green-dark); background: white; border: 1px dashed #91ad9c; border-radius: 9px; font-size: 10px; font-weight: 700; cursor: pointer; }
+.add-side-dish-button:hover { color: white; background: var(--green); border-style: solid; }
+.dish-slot .change-dish-button { position: absolute; z-index: 1; top: 43px; right: 6px; display: grid; place-items: center; width: 22px; min-height: 22px; height: 22px; margin: 0; padding: 0; color: var(--green); background: rgba(255,255,255,.88); border: 1px solid #bad0c1; border-radius: 50%; font-size: 14px; font-weight: 700; line-height: 1; cursor: pointer; }
+.dish-slot .change-dish-button:hover { color: white; background: var(--green); border-color: var(--green); }
+.change-dish-button:disabled, .add-side-dish-button:disabled { opacity: .45; cursor: not-allowed; }
+.additional-side .side-dish-open { background: #edf5ee; border: 1px solid #d3e4d6; }
+.additional-side .dish-kind { color: var(--orange); }
+.side-dish-search { display: grid; gap: 7px; margin-bottom: 18px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.side-dish-search input { width: 100%; min-height: 48px; padding: 11px 13px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 12px; font: inherit; }
+.side-dish-search-results { display: grid; gap: 9px; }
+.side-dish-search-result { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; min-height: 66px; padding: 10px 12px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 12px; text-align: left; cursor: pointer; }
+.side-dish-search-result > span { font-size: 24px; text-align: center; }
+.side-dish-search-result strong, .side-dish-search-result small { display: block; }
+.side-dish-search-result strong { font: 500 13px "Kiwi Maru", serif; }
+.side-dish-search-result small { margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.side-dish-search-result b { color: var(--green); font-size: 11px; }
+.side-dish-search-empty { padding: 24px 14px; color: var(--muted); background: #f6f5ef; border-radius: 12px; text-align: center; font-size: 11px; line-height: 1.7; }
 .simple-toggle { padding: 9px 14px; color: var(--orange); background: transparent; border: 1px solid var(--orange); border-radius: 30px; font-size: 11px; font-weight: 600; cursor: pointer; }
 .simple-toggle.saved { color: white; background: var(--orange); }
 .consecutive-toggle { padding: 9px 14px; color: #6f648f; background: transparent; border: 1px solid #9286b1; border-radius: 30px; font-size: 11px; font-weight: 600; cursor: pointer; }
@@ -293,6 +327,7 @@ textarea::placeholder { color: #99a198; }
 .recipe-steps { margin: 0; padding-left: 28px; counter-reset: steps; list-style: none; }
 .recipe-steps li { position: relative; margin-bottom: 14px; color: #56645b; font-size: 13px; line-height: 1.8; }
 .recipe-steps li::before { position: absolute; left: -28px; top: 1px; display: grid; place-items: center; width: 20px; height: 20px; color: white; background: var(--green); border-radius: 50%; counter-increment: steps; content: counter(steps); font-size: 10px; }
+.recipe-memo { margin: 0; padding: 14px 16px; color: var(--muted); background: #f6f5ef; border-radius: 12px; font-size: 12px; line-height: 1.8; white-space: pre-wrap; }
 .shopping-list { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .shopping-list section h3 { margin: 0 0 7px; color: var(--orange); font: 500 15px "Kiwi Maru", serif; }
 .shopping-list label { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 6px; min-height: 46px; border-bottom: 1px dashed var(--line); font-size: 12px; cursor: pointer; }
@@ -400,6 +435,8 @@ textarea::placeholder { color: #99a198; }
   .category-collection-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .collection-recipe { min-height: 82px; }
   .recipe-edit-fields, .sauce-edit-row { grid-template-columns: 1fr; }
+  .recipe-photo-head { align-items: stretch; flex-direction: column; }
+  .recipe-photo-head button { width: 100%; }
   .sauce-edit-row button { justify-self: end; }
   .recipe-edit-actions { grid-template-columns: 1fr; }
   .servings-control { display: block; }.servings-control > span { display: block; margin-bottom: 9px; }.servings-control > div { justify-content: space-between; }.servings-control button { flex: 1; }

@@ -168,12 +168,27 @@
         <button class="close-dialog" type="button" aria-label="閉じる">×</button>
       </div>
       <p class="dialog-note">変更した内容は、この端末に保存されます。</p>
+      <input id="recipe-edit-confidence" type="hidden" value="">
+      <section id="recipe-photo-panel" class="recipe-photo-panel" aria-labelledby="recipe-photo-title" hidden>
+        <div class="recipe-photo-head">
+          <div><p class="eyebrow">AI PHOTO INPUT</p><h3 id="recipe-photo-title">写真からレシピを追加</h3></div>
+          <button id="choose-recipe-photo" type="button">写真から読み取る</button>
+        </div>
+        <input id="recipe-photo-input" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/*">
+        <div id="recipe-photo-preview" class="recipe-photo-preview" hidden>
+          <img id="recipe-photo-preview-image" alt="選択した料理写真">
+          <button id="analyze-recipe-photo" type="button" disabled>AIで読み取る</button>
+        </div>
+        <p class="recipe-photo-caution">料理写真からの推定です。材料・分量・手順を確認してから保存してください。写真は解析後に保存されません。</p>
+        <p id="recipe-photo-status" class="recipe-photo-status" role="status" aria-live="polite" hidden></p>
+      </section>
       <div class="recipe-edit-fields">
         <label><span>種類</span><select id="recipe-edit-type"><option value="main">主菜</option><option value="side">副菜</option><option value="soup">汁物</option></select></label>
         <label><span>季節</span><select id="recipe-edit-season"><option value="spring">春</option><option value="summer">夏</option><option value="autumn">秋</option><option value="winter">冬</option><option value="none">指定なし</option></select></label>
         <label><span>メニュー名</span><input id="recipe-edit-name" type="text" required></label>
         <label><span>絵文字</span><input id="recipe-edit-icon" type="text" maxlength="4" placeholder="🍳" required></label>
         <label><span>調理時間（分）</span><input id="recipe-edit-time" type="number" min="1" required></label>
+        <label><span>何人分</span><input id="recipe-edit-servings" type="number" min="1" max="20" value="2" required></label>
         <fieldset class="recipe-attribute-editor full-field">
           <legend>料理の属性 <small>希望条件に合う献立として優先されます</small></legend>
           <div>
@@ -189,6 +204,7 @@
         </fieldset>
         <label class="full-field"><span>材料 <small>1行に「分類｜材料名｜数量｜単位」の順で入力</small></span><textarea id="recipe-edit-ingredients" rows="7" required></textarea></label>
         <label class="full-field"><span>作り方 <small>1行につき1手順</small></span><textarea id="recipe-edit-steps" rows="6" required></textarea></label>
+        <label class="full-field"><span>メモ <small>AIの推定内容や補足を確認できます</small></span><textarea id="recipe-edit-memo" rows="3"></textarea></label>
       </div>
       <section class="sauce-editor" aria-labelledby="sauce-editor-title">
         <div class="sauce-editor-head">
@@ -241,6 +257,14 @@
       <div id="recipes-list" class="recipe-collection"></div>
     </div>
   </dialog>
+  <dialog id="side-dish-picker-dialog" class="app-dialog side-dish-picker-dialog">
+    <div class="dialog-content">
+      <div class="dialog-head"><div><p class="eyebrow">ADD SIDE DISH</p><h2 id="side-dish-picker-title">副菜を追加</h2></div><button class="close-dialog" type="button" aria-label="閉じる">×</button></div>
+      <p id="side-dish-picker-note" class="dialog-note">使いたい食材や料理名で検索して、この日の料理を選べます。</p>
+      <label class="side-dish-search"><span>食材・料理名</span><input id="side-dish-search-input" type="search" autocomplete="off" placeholder="例：キャベツ"></label>
+      <div id="side-dish-search-results" class="side-dish-search-results" aria-live="polite"></div>
+    </div>
+  </dialog>
   <dialog id="favorites-dialog" class="app-dialog list-dialog">
     <div class="dialog-content">
       <div class="dialog-head"><div><p class="eyebrow">FAVORITES</p><h2>お気に入り</h2></div><button class="close-dialog" type="button" aria-label="閉じる">×</button></div>
@@ -249,9 +273,6 @@
     </div>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="recipes.js"></script>
-  <script src="side-dishes.js"></script>
-  <script src="soups.js"></script>
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>

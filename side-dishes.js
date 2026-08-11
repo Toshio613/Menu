@@ -8,7 +8,7 @@ const sideDish = (id, season, main, icon, time, ingredients, finish) => ({
   ]
 });
 
-const SIDE_DISHES = [
+export const SIDE_DISHES = [
   // 春
   sideDish("spring-cabbage-slaw","spring","春キャベツの塩昆布和え","🥬",10,[["野菜","春キャベツ",0.25,"玉"],["乾物・その他","塩昆布",15,"g"]],"キャベツを塩もみし、塩昆布とごま油で和える。"),
   sideDish("nanohana-mustard","spring","菜の花のからし和え","🌼",10,[["野菜","菜の花",1,"束"],["調味料","しょうゆ",1,"大さじ"]],"菜の花をさっとゆで、からしじょうゆで和える。"),

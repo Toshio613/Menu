@@ -8,7 +8,7 @@ const soupRecipe = (id, season, main, icon, time, ingredients, finish) => ({
   ]
 });
 
-const SOUPS = [
+export const SOUPS = [
   // 春
   soupRecipe("spring-cabbage-miso","spring","春キャベツと油揚げのみそ汁","🥬",12,[["野菜","春キャベツ",0.2,"玉"],["豆・乳製品","油揚げ",1,"枚"],["調味料","みそ",2,"大さじ"]],"だしで具材を煮て、火を止めてみそを溶く。"),
   soupRecipe("bamboo-clear","spring","たけのことわかめのすまし汁","🎋",15,[["野菜","ゆでたけのこ",100,"g"],["乾物・その他","乾燥わかめ",5,"g"],["調味料","しょうゆ",1,"小さじ"]],"だしでたけのこを煮て、わかめと薄口しょうゆを加える。"),

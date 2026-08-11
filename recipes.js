@@ -1,5 +1,5 @@
 // 献立とレシピのデータ。食材を追加すると買い物リストにも自動で反映されます。
-const RECIPES = [
+export const RECIPES = [
   {
     id: "pork-shabu", main: "豚しゃぶと夏野菜", side: "わかめごはん・豆腐のみそ汁", icon: "🥗", time: 20,
     ingredients: [
