@@ -88,5 +88,7 @@ export function initializeFamilySharing({ getLocalRecipes, applySharedRecipes, o
     }
   });
 
-  if (getAuthToken()) synchronize().catch(() => setAuthToken(""));
+  if (getAuthToken()) synchronize().catch(() => {
+    // 401の場合だけsynchronize内でトークンを破棄する。一時的な通信失敗ではログイン状態を維持する。
+  });
 }

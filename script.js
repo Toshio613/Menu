@@ -1359,12 +1359,14 @@ document.querySelector("#recipe-edit-form").addEventListener("submit", async eve
   }
   const recipeToSave = { ...editingRecipe, ...updated };
   const saveButton = event.currentTarget.querySelector('[type="submit"]');
+  let sharedRecipesAfterSave = null;
   if (recipeRepository.isAuthenticated()) {
     saveButton.disabled = true;
     saveButton.textContent = "共有へ保存中…";
     try {
       if (isCreating) await recipeRepository.create(recipeToSave);
       else await recipeRepository.update(recipeToSave);
+      sharedRecipesAfterSave = await recipeRepository.list();
     } catch (error) {
       notify(error.message || "共有レシピを保存できませんでした");
       return;
@@ -1396,7 +1398,8 @@ document.querySelector("#recipe-edit-form").addEventListener("submit", async eve
     season: updated.season,
     recipeType: savedRecipeType
   };
-  render();
+  if (sharedRecipesAfterSave) applySharedRecipes(sharedRecipesAfterSave);
+  else render();
   recipeEditDialog.close();
   notify("メニューの変更を保存しました");
 });

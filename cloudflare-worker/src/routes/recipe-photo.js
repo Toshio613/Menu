@@ -25,6 +25,9 @@ export async function handleRecipePhoto(request, env, cors) {
   if (!model) return jsonError("MODEL_NOT_ALLOWED", "設定されたAIモデルはWorkerで許可されていません。", 400, cors);
   const id = validClientId(form.get("clientId"));
   if (!id) return jsonError("INVALID_CLIENT", "端末識別情報が不正です。", 400, cors);
+  if (!String(env.OPENAI_API_KEY || "").trim()) {
+    return jsonError("OPENAI_CONFIG_MISSING", "AIサービスのAPIキーが設定されていません。", 503, cors);
+  }
   if (env.AI_RATE_LIMITER) {
     const { success } = await env.AI_RATE_LIMITER.limit({ key: `recipe-photo:${id}` });
     if (!success) return jsonError("RATE_LIMITED", "短時間の利用回数が上限に達しました。", 429, cors);

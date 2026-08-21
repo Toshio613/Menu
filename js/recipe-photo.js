@@ -113,6 +113,8 @@ function errorMessage(error) {
     IMAGE_DECODE_FAILED: "写真を読み込めませんでした。別の形式の写真をお試しください。",
     IMAGE_COMPRESS_FAILED: "写真の縮小に失敗しました。",
     API_URL_MISSING: "写真解析APIのURLが未設定です。",
+    OPENAI_CONFIG_MISSING: "写真解析APIの設定が不足しています。ローカルWorkerのOPENAI_API_KEYを確認してください。",
+    OPENAI_AUTH_ERROR: "写真解析APIの認証に失敗しました。WorkerのOPENAI_API_KEYを確認してください。",
     TIMEOUT: "解析に時間がかかっています。通信環境を確認して、もう一度お試しください。",
     RATE_LIMITED: "短時間の利用回数が上限に達しました。少し待ってからお試しください。",
     INVALID_RESPONSE: "AIの解析結果を読み取れませんでした。もう一度お試しください。",

@@ -33,23 +33,30 @@ GitHub Pagesの献立アプリに、料理写真解析とD1家族共有APIを提
 
 以下はリポジトリへ実値を保存せず、Cloudflare DashboardまたはWranglerで設定します。
 
-1. D1 Databaseを`menu-pic-recipes`などの名前で作成する。
-2. Worker `menu-pic`の Settings > Bindings で、D1 Database Bindingを追加する。Variable nameは必ず`DB`にする。
-3. D1のMigrationを実行する。
+1. Wranglerへログインし、D1 Databaseを`menu-pic-recipes`の名前で作成して設定へ反映する。
+
+   ```sh
+   npx wrangler login
+   npx wrangler d1 create menu-pic-recipes --binding DB --location apac --update-config
+   ```
+
+   `wrangler.jsonc`にはローカル開発用の`DB` Bindingが定義済みです。作成コマンドにより、同じBindingへ本番D1の`database_id`が追加されます。
+
+2. D1のMigrationを実行する。
 
    ```sh
    cd cloudflare-worker
-   npx wrangler d1 migrations apply menu-pic-recipes --remote
+   npm run db:migrate:remote
    ```
 
-4. Workerの Settings > Variables and Secrets で次のSecretを追加する。
+3. Workerの Settings > Variables and Secrets で次のSecretを追加する。
 
    - `OPENAI_API_KEY`: 現在のOpenAI APIキー
    - `FAMILY_PASSWORD`: 家族が画面で入力する共通パスワード
    - `TOKEN_SECRET`: 32バイト以上の予測困難なランダム文字列（家族パスワードとは別）
 
-5. Workerを再デプロイし、`menu-pic`にD1 BindingとSecretが反映されたことを確認する。
-6. GitHub Pagesで右上の「家族共有」からログインする。最初の成功時に、既存localStorage編集を含むレシピが一括移行される。
+4. Workerを再デプロイし、`menu-pic`にD1 BindingとSecretが反映されたことを確認する。
+5. GitHub Pagesで右上の「家族共有」からログインする。最初の成功時に、既存localStorage編集を含むレシピが一括移行される。
 
 Dashboardを使わず設定ファイルでBindingを管理する場合は、D1作成時に表示されたIDを使い、`wrangler.jsonc`のトップレベルへ次を追加します。実際のIDをGit管理する方針の場合だけ行ってください。
 
@@ -64,7 +71,16 @@ Dashboardを使わず設定ファイルでBindingを管理する場合は、D1�
 ]
 ```
 
-ローカル用Secretは`.dev.vars.example`をコピーした`.dev.vars`へ置き、コミットしません。ローカルD1 migrationは`npx wrangler d1 migrations apply menu-pic-recipes --local`で実行します。
+ローカル用Secretは`.dev.vars.example`をコピーした`.dev.vars`へ置き、コミットしません。ローカルD1は次の手順で準備します。
+
+```sh
+cd cloudflare-worker
+cp .dev.vars.example .dev.vars
+npm run db:migrate:local
+npm run dev -- --port 8787
+```
+
+ローカルD1のデータは既定で`cloudflare-worker/.wrangler/state`以下に保存されます。フロントを許可済みOriginで開き、「家族共有」へログインすると、起動時に`GET /api/recipes`、新規レシピ保存時に`POST /api/recipes`が使用されます。未ログイン時や同期失敗時は既存の端末内レシピを引き続き利用できます。
 
 ## 検証
 

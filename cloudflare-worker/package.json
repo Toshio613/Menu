@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply menu-pic-recipes --local",
+    "db:migrate:remote": "wrangler d1 migrations apply menu-pic-recipes --remote",
     "check": "wrangler deploy --dry-run",
     "lint": "eslint .. --config ../eslint.config.js",
     "test": "node --test"
