@@ -30,6 +30,7 @@
     {
       "binding": "DB",
       "database_name": "menu-pic-recipes",
+      "database_id": "3ff26a5a-de47-44ce-8dd6-49a234f8573f",
       "migrations_dir": "migrations"
     }
   ]
