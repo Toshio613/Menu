@@ -5,6 +5,7 @@ import { selectedModel, validClientId } from "../src/lib/validation.js";
 import { normalizeRecipe } from "../src/lib/recipe-validation.js";
 import { createFamilyToken, passwordsMatch, verifyFamilyToken } from "../src/lib/auth.js";
 import { validateRecipeResult } from "../../js/recipe-photo.js";
+import { recipeIcon } from "../../js/recipe-icon.js";
 
 const recipe = {
   name: "豚の生姜焼き",
@@ -38,6 +39,14 @@ test("D1へ保存するレシピを正規化する", () => {
   });
   assert.equal(normalized?.id, "ginger-pork");
   assert.equal(normalizeRecipe({ ...normalized, category: "dessert" }), null);
+});
+
+test("旧形式や絵文字欠落データの料理アイコンを復元する", () => {
+  assert.equal(recipeIcon({ icon: "🐟", type: "main" }), "🐟");
+  assert.equal(recipeIcon({ emoji: "🥬", category: "side" }), "🥬");
+  assert.equal(recipeIcon({ category: "main" }), "🍳");
+  assert.equal(recipeIcon({ type: "side" }), "🥗");
+  assert.equal(recipeIcon({ type: "soup", icon: "  " }), "🍲");
 });
 
 test("家族パスワードと期限付きトークンを検証する", async () => {

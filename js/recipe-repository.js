@@ -1,4 +1,5 @@
 import { apiRequest, getAuthToken } from "./api-client.js";
+import { recipeIcon } from "./recipe-icon.js";
 
 export function toApiRecipe(recipe) {
   return {
@@ -6,7 +7,7 @@ export function toApiRecipe(recipe) {
     name: recipe.main,
     category: recipe.type === "side" ? "side" : recipe.type === "soup" ? "soup" : "main",
     season: recipe.season || "none",
-    emoji: recipe.icon || "🍳",
+    emoji: recipeIcon(recipe),
     cookingTime: Math.max(1, Math.round(Number(recipe.time) || 1)),
     servings: Math.max(1, Math.round(Number(recipe.servings) || 2)),
     attributes: Array.isArray(recipe.attributes) ? recipe.attributes : [],
@@ -25,7 +26,7 @@ export function fromApiRecipe(recipe) {
     ...(recipe.category === "main" ? {} : { type: recipe.category }),
     main: recipe.name,
     season: recipe.season,
-    icon: recipe.emoji,
+    icon: recipeIcon(recipe),
     time: recipe.cookingTime,
     servings: recipe.servings,
     attributes: recipe.attributes,

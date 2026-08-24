@@ -34,7 +34,7 @@
           <p class="hero-text">旬と家にある食材から、わが家にちょうどいい献立を提案します。</p>
         </div>
         <div id="hero-art" class="hero-art" role="img" aria-label="夏のごはん">
-          <div class="season-scene"><span class="scene-spark spark-one"></span><span class="scene-spark spark-two"></span><span class="scene-main"><svg class="meal-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="25" r="17"/><circle cx="24" cy="25" r="11"/><path d="M7 7v13M4 7v7c0 3 6 3 6 0V7M41 7v34M41 7c-5 3-6 10 0 13"/></svg></span><span class="scene-side side-one"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M27 5C14 6 6 13 6 27c13-1 20-8 21-22ZM7 26 22 11"/></svg></span><span class="scene-side side-two"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="17" r="10"/><path d="m11 8 5-4 5 4"/></svg></span><span class="scene-ground"></span></div>
+          <div class="season-scene"><span class="scene-spark spark-one">✦</span><span class="scene-spark spark-two">●</span><span class="scene-main">🍚</span><span class="scene-side side-one">🌿</span><span class="scene-side side-two">🍅</span><span class="scene-ground"></span></div>
         </div>
       </section>
 
@@ -47,9 +47,35 @@
           <span class="sr-only">献立の希望を入力</span>
           <textarea id="request" rows="2" placeholder="例：豚こまを使いたい。水曜はさっぱりめで。"></textarea>
           <button id="clear-request" class="clear-input" type="button">クリア</button>
-          <button id="generate" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z"/></svg> 献立をつくる</button>
+          <button id="generate" type="button"><span aria-hidden="true">✦</span> 献立をつくる</button>
         </label>
         <p id="recognized-days" class="recognized-days" role="status" aria-live="polite" hidden></p>
+        <div class="weekday-tabs" aria-label="希望する曜日">
+          <span>曜日</span>
+          <div>
+            <button type="button" data-request-day="0" aria-pressed="false">日曜</button>
+            <button type="button" data-request-day="1" aria-pressed="false">月曜</button>
+            <button type="button" data-request-day="2" aria-pressed="false">火曜</button>
+            <button type="button" data-request-day="3" aria-pressed="false">水曜</button>
+            <button type="button" data-request-day="4" aria-pressed="false">木曜</button>
+            <button type="button" data-request-day="5" aria-pressed="false">金曜</button>
+            <button type="button" data-request-day="6" aria-pressed="false">土曜</button>
+          </div>
+        </div>
+        <div class="attribute-tabs" aria-label="料理の希望属性">
+          <span>料理の属性</span>
+          <div>
+            <button type="button" data-request-attribute="noodle" aria-pressed="false">麺類</button>
+            <button type="button" data-request-attribute="rice" aria-pressed="false">ご飯類</button>
+            <button type="button" data-request-attribute="western" aria-pressed="false">洋食</button>
+            <button type="button" data-request-attribute="japanese" aria-pressed="false">和食</button>
+            <button type="button" data-request-attribute="chinese" aria-pressed="false">中華</button>
+            <button type="button" data-request-attribute="seasonal" aria-pressed="false">旬</button>
+            <button type="button" data-request-attribute="light" aria-pressed="false">さっぱり</button>
+            <button type="button" data-request-attribute="rich" aria-pressed="false">こってり</button>
+            <button type="button" id="budget-preference" data-request="節約できる献立にしたい" data-preference="budget" aria-pressed="false">節約したい</button>
+          </div>
+        </div>
         <div class="quick-tags" aria-label="希望の例">
           <label class="vegetable-preference">
             <span>冷蔵庫の食材</span>
@@ -58,58 +84,12 @@
             <button id="clear-vegetables" type="button" aria-label="冷蔵庫の食材をクリア">クリア</button>
           </label>
         </div>
-        <details id="advanced-conditions" class="advanced-conditions">
-          <summary>
-            <span class="summary-label"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M7 14v6"/></svg>詳細条件</span>
-            <span id="active-condition-count" class="active-condition-count">条件なし</span>
-          </summary>
-          <div class="advanced-conditions-body">
-            <div class="weekday-tabs" aria-label="希望する曜日">
-              <span>曜日</span>
-              <div>
-                <button type="button" data-request-day="0" aria-pressed="false">日曜</button>
-                <button type="button" data-request-day="1" aria-pressed="false">月曜</button>
-                <button type="button" data-request-day="2" aria-pressed="false">火曜</button>
-                <button type="button" data-request-day="3" aria-pressed="false">水曜</button>
-                <button type="button" data-request-day="4" aria-pressed="false">木曜</button>
-                <button type="button" data-request-day="5" aria-pressed="false">金曜</button>
-                <button type="button" data-request-day="6" aria-pressed="false">土曜</button>
-              </div>
-            </div>
-            <div class="attribute-tabs" aria-label="料理の希望属性">
-              <span>料理の属性</span>
-              <div>
-                <button type="button" data-request-attribute="noodle" aria-pressed="false">麺類</button>
-                <button type="button" data-request-attribute="rice" aria-pressed="false">ご飯類</button>
-                <button type="button" data-request-attribute="western" aria-pressed="false">洋食</button>
-                <button type="button" data-request-attribute="japanese" aria-pressed="false">和食</button>
-                <button type="button" data-request-attribute="chinese" aria-pressed="false">中華</button>
-                <button type="button" data-request-attribute="seasonal" aria-pressed="false">旬</button>
-                <button type="button" data-request-attribute="light" aria-pressed="false">さっぱり</button>
-                <button type="button" data-request-attribute="rich" aria-pressed="false">こってり</button>
-                <button type="button" id="budget-preference" data-request="節約できる献立にしたい" data-preference="budget" aria-pressed="false">節約したい</button>
-              </div>
-            </div>
-            <div class="season-picker" aria-label="旬の季節を選択">
-              <span>旬を選ぶ</span>
-              <div id="season-buttons">
-                <button type="button" data-season="spring">春</button><button type="button" class="active" data-season="summer">夏</button><button type="button" data-season="autumn">秋</button><button type="button" data-season="winter">冬</button>
-              </div>
-            </div>
+        <div class="season-picker" aria-label="旬の季節を選択">
+          <span>旬を選ぶ</span>
+          <div id="season-buttons">
+            <button type="button" data-season="spring">春</button><button type="button" class="active" data-season="summer">夏</button><button type="button" data-season="autumn">秋</button><button type="button" data-season="winter">冬</button>
           </div>
-        </details>
-        <div id="active-condition-tags" class="active-condition-tags" aria-label="選択中の詳細条件"></div>
-      </section>
-
-      <section id="today-menu-card" class="today-menu-card" aria-labelledby="today-menu-title">
-        <div class="today-menu-icon" aria-hidden="true"><svg class="meal-icon" viewBox="0 0 48 48"><path d="M8 25h32c0 9-7 15-16 15S8 34 8 25Z"/><path d="M5 25h38M16 18c-3-4 3-5 0-9M25 18c-3-4 3-5 0-9M34 18c-3-4 3-5 0-9"/></svg></div>
-        <div class="today-menu-content">
-          <p id="today-menu-date" class="today-menu-date"></p>
-          <p class="eyebrow">TODAY'S MENU</p>
-          <h2 id="today-menu-title">今日の献立</h2>
-          <strong id="today-menu-name"></strong>
         </div>
-        <button id="today-recipe-button" type="button">レシピを見る <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
       </section>
 
       <section class="weekly" aria-labelledby="weekly-title">
@@ -172,10 +152,10 @@
     </main>
 
     <nav class="bottom-nav" aria-label="メインメニュー">
-      <a class="active" href="#"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 11 8-7 8 7v9h-6v-6h-4v6H4Z"/></svg>ホーム</a>
-      <a href="#" id="recipes-nav"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm2 4h8M8 12h8M8 16h5"/></svg>献立</a>
-      <a href="#" id="shopping-nav"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8Zm3 0a4 4 0 0 1 8 0"/></svg>買い物</a>
-      <a href="#" id="favorites-nav"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8.5C20 14 12 19 12 19S4 14 4 8.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 2.5Z"/></svg>お気に入り</a>
+      <a class="active" href="#"><span>⌂</span>ホーム</a>
+      <a href="#" id="recipes-nav"><span>▤</span>献立</a>
+      <a href="#" id="shopping-nav"><span>✓</span>買い物</a>
+      <a href="#" id="favorites-nav"><span>♡</span>お気に入り</a>
     </nav>
   </div>
   <dialog id="recipe-dialog" class="app-dialog">

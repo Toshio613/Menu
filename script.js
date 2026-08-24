@@ -16,6 +16,7 @@ import { APP_CONFIG } from "./js/app-config.js";
 import { initializeRecipePhoto, resetRecipePhotoUI } from "./js/recipe-photo.js";
 import { initializeFamilySharing } from "./js/family-sharing.js";
 import { recipeRepository } from "./js/recipe-repository.js";
+import { recipeIcon } from "./js/recipe-icon.js";
 
 const menus = RECIPES;
 const sideDishes = SIDE_DISHES;
@@ -40,7 +41,7 @@ Object.entries(menuEdits).forEach(([id, saved]) => {
     id,
     type: saved.type === "main" ? undefined : saved.type,
     season: saved.season || "none",
-    icon: saved.icon || "🍳",
+    icon: recipeIcon(saved),
     main: saved.main,
     time: Number(saved.time) || 15,
     servings: Math.max(1, Number(saved.servings) || APP_CONFIG.recipePhoto.defaultServings),
@@ -62,7 +63,8 @@ Object.entries(menuEdits).forEach(([id, saved]) => {
   const saved = menuEdits[recipe.id];
   if (!saved || typeof saved !== "object") return;
   if (typeof saved.main === "string" && saved.main.trim()) recipe.main = saved.main;
-  if (typeof saved.icon === "string" && saved.icon.trim()) recipe.icon = saved.icon;
+  if ((typeof saved.icon === "string" && saved.icon.trim())
+    || (typeof saved.emoji === "string" && saved.emoji.trim())) recipe.icon = recipeIcon(saved);
   if (["spring", "summer", "autumn", "winter", "none"].includes(saved.season)) recipe.season = saved.season;
   if (Number.isFinite(Number(saved.time)) && Number(saved.time) > 0) recipe.time = Number(saved.time);
   if (Number.isFinite(Number(saved.servings)) && Number(saved.servings) > 0) recipe.servings = Number(saved.servings);
@@ -74,21 +76,15 @@ Object.entries(menuEdits).forEach(([id, saved]) => {
   recipe.sauces = Array.isArray(saved.sauces) ? saved.sauces : [];
 });
 
+// 旧ローカルデータや共有DBに icon がない場合も、emoji または料理カテゴリから復元する。
+[...menus, ...sideDishes, ...soups].forEach(recipe => {
+  recipe.icon = recipeIcon(recipe);
+});
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, character => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[character]);
-}
-
-function mealIconSvg(type = "main") {
-  const paths = type === "soup"
-    ? '<path d="M7 20h34c-1 11-8 18-17 18S8 31 7 20Z"/><path d="M5 20h38M16 14c-3-4 3-5 0-9M25 14c-3-4 3-5 0-9M34 14c-3-4 3-5 0-9"/>'
-    : type === "side"
-      ? '<path d="M9 27c3-7 9-11 15-11s12 4 15 11"/><path d="M6 27h36c-1 8-8 13-18 13S7 35 6 27ZM18 16c-1-4 2-7 6-9 1 4-1 8-6 9Z"/>'
-      : type === "eating"
-        ? '<path d="M10 12h24v10c0 9-5 16-12 16S10 31 10 22V12Z"/><path d="M34 17h3a6 6 0 0 1 0 12h-4M8 41h29"/>'
-        : '<circle cx="24" cy="25" r="17"/><circle cx="24" cy="25" r="11"/><path d="M7 7v13M4 7v7c0 3 6 3 6 0V7M41 7v34M41 7c-5 3-6 10 0 13"/>';
-  return `<svg class="meal-icon" viewBox="0 0 48 48" aria-hidden="true">${paths}</svg>`;
 }
 
 const days = ["日", "月", "火", "水", "木", "金", "土"];
@@ -193,6 +189,7 @@ function indicesForRecipeIds(ids, recipes) {
 }
 
 function applySharedRecipes(sharedRecipes) {
+  sharedRecipes.forEach(recipe => { recipe.icon = recipeIcon(recipe); });
   const mainIds = selectedRecipeIds(selected, menus);
   const sideIds = selectedRecipeIds(selectedSides, sideDishes);
   const soupIds = selectedRecipeIds(selectedSoups, soups);
@@ -305,7 +302,6 @@ function updateRecognizedDays() {
   requestedConditions = parseRequestedConditions(request);
   syncWeekdayTabs();
   syncAttributeTabs();
-  updateActiveConditionTags();
   const message = document.querySelector("#recognized-days");
   if (!requestedDays.length) {
     message.hidden = true;
@@ -314,24 +310,6 @@ function updateRecognizedDays() {
   }
   message.textContent = `${requestedDays.map(({ day }) => `${day}曜日`).join("・")}を認識しました`;
   message.hidden = false;
-}
-
-function updateActiveConditionTags() {
-  const tags = [];
-  requestedDays.forEach(({ day }) => tags.push(`${day}曜`));
-  parseRequestAttributes(document.querySelector("#request").value).forEach(attribute => {
-    const label = menuAttributeInfo[attribute]?.label;
-    if (label && !tags.includes(label)) tags.push(label);
-  });
-  if (activeSeason !== "none") tags.push(seasonInfo?.[activeSeason]?.label || "旬");
-  if (budgetMode) tags.push("節約");
-  if (ingredientExclusionMode) tags.push("食材を除外");
-  const uniqueTags = [...new Set(tags)];
-  document.querySelector("#active-condition-tags").innerHTML = uniqueTags
-    .map(tag => `<span>${escapeHtml(tag)}</span>`).join("");
-  document.querySelector("#active-condition-count").textContent = uniqueTags.length
-    ? `${uniqueTags.length}件を選択中`
-    : "条件なし";
 }
 
 function recipeVegetables(recipe) {
@@ -453,7 +431,7 @@ function renderMobileWeekOverview() {
     return `<button type="button" role="tab" data-mobile-day="${index}" aria-label="${date.getMonth() + 1}月${date.getDate()}日 ${days[index]}曜日 ${escapeHtml(name)}">
       <span class="mobile-weekday">${days[index]}</span>
       <span class="mobile-week-date">${date.getMonth() + 1}/${date.getDate()}</span>
-      <span class="mobile-week-icon" aria-hidden="true">${mealIconSvg(menu ? "main" : "eating")}</span>
+      <span class="mobile-week-icon" aria-hidden="true">${menu ? escapeHtml(recipeIcon(menu)) : "☕"}</span>
       <span class="mobile-week-name">${escapeHtml(name)}</span>
     </button>`;
   }).join("");
@@ -481,27 +459,6 @@ function updateMobileDayUI() {
       overview.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
     }
   }
-}
-
-function renderTodayMenu() {
-  const card = document.querySelector("#today-menu-card");
-  const button = document.querySelector("#today-recipe-button");
-  let todayMenuIndex = null;
-  if (visibleWeekKey() === dateStorageKey(currentWeekStart)) {
-    todayMenuIndex = selected[now.getDay()];
-  } else {
-    try {
-      const weeks = JSON.parse(localStorage.getItem(weeklyMenusStorageKey) || "{}");
-      todayMenuIndex = weeks?.[dateStorageKey(currentWeekStart)]?.selected?.[now.getDay()] ?? null;
-    } catch { todayMenuIndex = null; }
-  }
-  const recipe = Number.isInteger(todayMenuIndex) ? menus[todayMenuIndex] : null;
-  document.querySelector("#today-menu-date").textContent = `${now.getMonth() + 1}月${now.getDate()}日（${days[now.getDay()]}）`;
-  document.querySelector("#today-menu-name").textContent = recipe?.main || "今日は外食・サボり日";
-  document.querySelector(".today-menu-icon").innerHTML = mealIconSvg(recipe ? "main" : "eating");
-  button.hidden = !recipe;
-  button.dataset.recipeIndex = recipe ? String(todayMenuIndex) : "";
-  card.hidden = false;
 }
 
 function changeMobileDay(offset) {
@@ -582,7 +539,6 @@ function scheduleDateRollover() {
 
 function render() {
   updateWeeklyLockUI();
-  renderTodayMenu();
   renderMobileWeekOverview();
   const allDaysOff = selected.length === 7 && selected.every(menuIndex => menuIndex === null);
   const takeWeekOffButton = document.querySelector("#take-week-off");
@@ -644,25 +600,25 @@ function render() {
     return `<article class="menu-card ${today ? "today" : ""}" data-day-index="${index}">
       <div class="day-row"><span class="day">${days[index]}</span><span class="date">${cardDateLabel(date)}</span></div>
       <button class="recipe-open" type="button" data-recipe="${menuIndex}" aria-label="${escapeHtml(menu.main)}のレシピを見る">
-        <div class="dish-icon season-${menu.season}" aria-hidden="true">${mealIconSvg("main")}</div>
+        <div class="dish-icon season-${menu.season}" aria-hidden="true">${escapeHtml(recipeIcon(menu))}</div>
         <span class="dish-kind">主菜</span><h3>${escapeHtml(menu.main)}</h3><span class="detail-link">レシピを見る →</span>
       </button>
       <div class="dish-slot ${sideDish ? "" : "empty"}">
         ${sideDish ? `<button class="side-dish-open" type="button" data-side-recipe="${sideDishIndex}" aria-label="${escapeHtml(sideDish.main)}のレシピを見る">
-          <span class="dish-kind">副菜</span><strong>${mealIconSvg("side")}<span>${escapeHtml(sideDish.main)}</span></strong>
+          <span class="dish-kind">副菜</span><strong>${escapeHtml(recipeIcon(sideDish))} ${escapeHtml(sideDish.main)}</strong>
         </button><button class="remove-dish" type="button" data-remove-side="${index}" aria-label="${days[index]}曜日の副菜を削除" ${weeklyMenuLocked ? "disabled" : ""}>×</button>`
         : '<div class="removed-dish"><span class="dish-kind">副菜</span><small>なし</small></div>'}
         <button class="change-dish-button" type="button" data-change-side-dish="${index}" aria-label="${days[index]}曜日の副菜だけ変える" title="副菜だけ変える" ${weeklyMenuLocked ? "disabled" : ""}>↻</button>
       </div>
       ${additionalSides.map(extraSide => `<div class="dish-slot additional-side">
         <button class="side-dish-open" type="button" data-side-recipe="${sideDishes.indexOf(extraSide)}" aria-label="${escapeHtml(extraSide.main)}のレシピを見る">
-          <span class="dish-kind">追加の副菜</span><strong>${mealIconSvg("side")}<span>${escapeHtml(extraSide.main)}</span></strong>
+          <span class="dish-kind">追加の副菜</span><strong>${escapeHtml(recipeIcon(extraSide))} ${escapeHtml(extraSide.main)}</strong>
         </button><button class="remove-dish" type="button" data-remove-additional-side="${index}" data-side-id="${extraSide.id}" aria-label="${days[index]}曜日の追加副菜を削除" ${weeklyMenuLocked ? "disabled" : ""}>×</button>
       </div>`).join("")}
       <button class="add-side-dish-button" type="button" data-add-side-dish="${index}" ${weeklyMenuLocked ? "disabled" : ""}>＋ 副菜を追加</button>
       <div class="dish-slot ${soup ? "" : "empty"}">
         ${soup ? `<button class="soup-open" type="button" data-soup-recipe="${soupIndex}" aria-label="${escapeHtml(soup.main)}のレシピを見る">
-          <span class="dish-kind">汁物</span><strong>${mealIconSvg("soup")}<span>${escapeHtml(soup.main)}</span></strong>
+          <span class="dish-kind">汁物</span><strong>${escapeHtml(recipeIcon(soup))} ${escapeHtml(soup.main)}</strong>
         </button><button class="remove-dish" type="button" data-remove-soup="${index}" aria-label="${days[index]}曜日の汁物を削除" ${weeklyMenuLocked ? "disabled" : ""}>×</button>`
         : '<div class="removed-dish soup-removed"><span class="dish-kind">汁物</span><small>なし</small></div>'}
         <button class="change-dish-button" type="button" data-change-soup="${index}" aria-label="${days[index]}曜日の汁物だけ変える" title="汁物だけ変える" ${weeklyMenuLocked ? "disabled" : ""}>↻</button>
@@ -1052,7 +1008,6 @@ function updateBudgetUI() {
   button.classList.toggle("active", budgetMode);
   button.setAttribute("aria-pressed", budgetMode);
   button.textContent = budgetMode ? "✓ 節約を優先中" : "節約したい";
-  updateActiveConditionTags();
 }
 
 const seasonInfo = {
@@ -1127,14 +1082,12 @@ function updateHeroVisual() {
   let index = Math.floor(Math.random() * visuals.length);
   if (index === lastHeroVisual) index = (index + 1) % visuals.length;
   lastHeroVisual = index;
-  const [, , , label] = visuals[index];
+  const [main, sideOne, sideTwo, label] = visuals[index];
   const art = document.querySelector("#hero-art");
   art.setAttribute("aria-label", label);
   art.innerHTML = `<div class="season-scene" data-scene-season="${activeSeason}">
-    <span class="scene-spark spark-one"></span><span class="scene-spark spark-two"></span>
-    <span class="scene-main">${mealIconSvg("main")}</span>
-    <span class="scene-side side-one"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M27 5C14 6 6 13 6 27c13-1 20-8 21-22ZM7 26 22 11"/></svg></span>
-    <span class="scene-side side-two"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="17" r="10"/><path d="m11 8 5-4 5 4"/></svg></span>
+    <span class="scene-spark spark-one">✦</span><span class="scene-spark spark-two">●</span>
+    <span class="scene-main">${main}</span><span class="scene-side side-one">${sideOne}</span><span class="scene-side side-two">${sideTwo}</span>
     <span class="scene-ground"></span></div>`;
 }
 
@@ -1157,7 +1110,6 @@ function updateSeasonUI() {
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", active);
   });
-  updateActiveConditionTags();
 }
 
 function ingredientRows(ingredients) {
@@ -1208,7 +1160,7 @@ function showRecipe(recipe) {
   }
   document.querySelector("#recipe-content").innerHTML = `
     ${recipeReturnContext ? `<button class="back-to-list" type="button" data-back-list>← ${recipeReturnContext.target === "favorites" ? "お気に入り" : "献立"}に戻る</button>` : ""}
-    <div class="dialog-head"><div><p class="eyebrow">${isSoup ? "SOUP" : isSideDish ? "SIDE DISH" : "MAIN DISH"}・${Math.max(1, Number(recipe.servings) || APP_CONFIG.recipePhoto.defaultServings)}人分</p><h2 class="recipe-dialog-title">${mealIconSvg(isSoup ? "soup" : isSideDish ? "side" : "main")}<span>${escapeHtml(recipe.main)}</span></h2></div><button class="close-dialog" type="button" aria-label="閉じる">×</button></div>
+    <div class="dialog-head"><div><p class="eyebrow">${isSoup ? "SOUP" : isSideDish ? "SIDE DISH" : "MAIN DISH"}・${Math.max(1, Number(recipe.servings) || APP_CONFIG.recipePhoto.defaultServings)}人分</p><h2>${escapeHtml(recipeIcon(recipe))} ${escapeHtml(recipe.main)}</h2></div><button class="close-dialog" type="button" aria-label="閉じる">×</button></div>
     <p class="recipe-meta">調理時間 約${recipe.time}分　／　${isSoup ? "汁物" : isSideDish ? "副菜" : "主菜"}</p>
     <div class="recipe-attribute-tags" aria-label="料理の属性">${attributes.map(attribute =>
       `<span>${escapeHtml(menuAttributeInfo[attribute]?.label || attribute)}</span>`).join("")}</div>
@@ -1276,7 +1228,7 @@ function openRecipeEditor(recipe) {
   document.querySelector("#recipe-edit-type").disabled = true;
   document.querySelector("#recipe-edit-season").value = recipe.season;
   document.querySelector("#recipe-edit-name").value = recipe.main;
-  document.querySelector("#recipe-edit-icon").value = recipe.icon;
+  document.querySelector("#recipe-edit-icon").value = recipeIcon(recipe);
   document.querySelector("#recipe-edit-time").value = recipe.time;
   document.querySelector("#recipe-edit-servings").value = Math.max(1, Number(recipe.servings) || APP_CONFIG.recipePhoto.defaultServings);
   setRecipeAttributeEditor(recipe.attributes || []);
@@ -1568,7 +1520,7 @@ function collectionCards(recipes, removable = false, recipeType = "main") {
   if (!recipes.length) return '<p class="group-empty">登録はありません</p>';
   return recipes.map(recipe => `<article class="collection-card">
     <button class="collection-recipe" type="button" data-open-recipe="${recipe.id}" data-recipe-type="${recipeType}">
-      <span class="collection-icon">${mealIconSvg(recipeType === "soup" ? "soup" : recipeType === "side" ? "side" : "main")}</span><span><strong>${escapeHtml(recipe.main)}</strong>
+      <span class="collection-icon">${escapeHtml(recipeIcon(recipe))}</span><span><strong>${escapeHtml(recipe.main)}</strong>
         ${recipeType === "main" && favoriteIds.has(recipe.id) ? '<em class="favorite-badge" aria-label="お気に入り">♥</em>' : ""}
         ${recipeType === "main" && simpleIds.has(recipe.id) ? '<em class="simple-badge">かんたん</em>' : ""}
         ${recipeType === "main" && consecutiveIds.has(recipe.id) ? '<em class="consecutive-badge">連日</em>' : ""}
@@ -1599,7 +1551,7 @@ function groupedCollection(recipes, removable = false, selectedSeason = "spring"
   const buildTabs = tabGroups => tabGroups.map(group => {
     const count = recipes.filter(group.matches).length;
     const shortLabel = group.label.replace("の献立", "").replace("メニュー", "");
-    return `<button type="button" class="${group.id === current.id ? "active" : ""}" data-collection-season="${group.id}" data-list-target="${target}" data-recipe-type="${recipeType}" aria-pressed="${group.id === current.id}"><span>${mealIconSvg(recipeType === "soup" ? "soup" : recipeType === "side" ? "side" : "main")}</span>${shortLabel}<small>${count}</small></button>`;
+    return `<button type="button" class="${group.id === current.id ? "active" : ""}" data-collection-season="${group.id}" data-list-target="${target}" data-recipe-type="${recipeType}" aria-pressed="${group.id === current.id}"><span>${group.icon}</span>${shortLabel}<small>${count}</small></button>`;
   }).join("");
   const seasonTabs = buildTabs(seasonGroups);
   const categoryTabs = target === "recipes" && recipeType === "main"
@@ -1656,7 +1608,7 @@ function renderSideDishSearchResults() {
     ? matches.map(recipe => {
       const ingredients = recipe.ingredients.map(([, name]) => name).join("、");
       return `<button class="side-dish-search-result" type="button" data-select-additional-side="${recipe.id}">
-        <span aria-hidden="true">${recipe.icon}</span><span><strong>${escapeHtml(recipe.main)}</strong><small>${escapeHtml(ingredients)}・約${recipe.time}分</small></span><b>追加</b>
+        <span aria-hidden="true">${escapeHtml(recipeIcon(recipe))}</span><span><strong>${escapeHtml(recipe.main)}</strong><small>${escapeHtml(ingredients)}・約${recipe.time}分</small></span><b>追加</b>
       </button>`;
     }).join("")
     : `<p class="side-dish-search-empty">「${escapeHtml(input.value.trim())}」を使う${isSoup ? "汁物" : "副菜"}は見つかりませんでした。<br>別の食材名でもお試しください。</p>`;
@@ -1991,7 +1943,6 @@ function updateIngredientExclusionUI() {
     "aria-label",
     ingredientExclusionMode ? "献立に使用しない食材" : "献立で優先する食材"
   );
-  updateActiveConditionTags();
 }
 
 document.querySelector("#exclude-ingredients").addEventListener("click", () => {
@@ -2115,12 +2066,6 @@ document.querySelector("#current-week").addEventListener("click", () => {
   const offset = Math.round((currentWeekStart - visibleWeekStart) / (7 * 24 * 60 * 60 * 1000));
   if (offset) changeVisibleWeek(offset);
 });
-document.querySelector("#today-recipe-button").addEventListener("click", event => {
-  const recipe = menus[Number(event.currentTarget.dataset.recipeIndex)];
-  if (!recipe) return;
-  recipeReturnContext = null;
-  showRecipe(recipe);
-});
 
 initializeRecipePhoto({
   onAnalyzed(recipe) {
@@ -2129,7 +2074,7 @@ initializeRecipePhoto({
       ? recipe.season
       : "none";
     document.querySelector("#recipe-edit-name").value = recipe.name.trim();
-    document.querySelector("#recipe-edit-icon").value = recipe.icon?.trim() || "🍳";
+    document.querySelector("#recipe-edit-icon").value = recipeIcon({ ...recipe, type: recipe.category });
     document.querySelector("#recipe-edit-time").value = Math.max(1, Math.round(recipe.time));
     document.querySelector("#recipe-edit-servings").value = Math.max(1, Math.round(recipe.servings || APP_CONFIG.recipePhoto.defaultServings));
     document.querySelector("#recipe-edit-confidence").value = Math.round(recipe.confidence);
