@@ -19,7 +19,10 @@ import { recipeRepository } from "./js/recipe-repository.js";
 import { recipeIcon } from "./js/recipe-icon.js";
 import {
   applyRequestedMenuAssignments,
-  parseRequestedMenuAssignments
+  loadRequestedMenuSelection,
+  parseRequestedMenuResult,
+  restoreRequestedMenuAssignments,
+  serializeRequestedMenuAssignments
 } from "./js/requested-menu-loader.js";
 
 const menus = RECIPES;
@@ -100,6 +103,7 @@ let mobileDayIndex = now.getDay();
 const todayKey = [now.getFullYear(), now.getMonth(), now.getDate()].join("-");
 const weeklyMenuStorageKey = "weeklyMenu";
 const weeklyMenusStorageKey = "weeklyMenus";
+const weeklyRequestedMenusStorageKey = "weeklyRequestedMenus";
 const weeklyMenuLocksStorageKey = "weeklyMenuLocks";
 const weeklyMenuLockWeekKey = "weeklyMenuLockWeek";
 let weeklyMenuLocks = {};
@@ -205,6 +209,7 @@ function applySharedRecipes(sharedRecipes) {
   selectedSides = indicesForRecipeIds(sideIds, sideDishes);
   selectedSoups = indicesForRecipeIds(soupIds, soups);
   additionalSideIds = additionalSideIds.map(ids => ids.filter(id => sideDishes.some(recipe => recipe.id === id)));
+  updateRecognizedDays({ persistMenus: false });
   saveWeeklyMenu();
   render();
 }
@@ -250,14 +255,16 @@ function saveWeeklyMenu() {
   let savedWeeks = {};
   try { savedWeeks = JSON.parse(localStorage.getItem(weeklyMenusStorageKey) || "{}"); } catch { /* 空の保存先を使う */ }
   if (!savedWeeks || Array.isArray(savedWeeks) || typeof savedWeeks !== "object") savedWeeks = {};
-  savedWeeks[visibleWeekKey()] = {
+  const savedMenu = {
     weekStart: visibleWeekKey(),
     selected,
     selectedSides,
     selectedSoups,
     additionalSideIds
   };
+  savedWeeks[visibleWeekKey()] = savedMenu;
   localStorage.setItem(weeklyMenusStorageKey, JSON.stringify(savedWeeks));
+  return savedMenu;
 }
 
 const savedWeeklyMenu = loadWeeklyMenu();
@@ -275,6 +282,8 @@ let excludedIngredients = [];
 let ingredientExclusionMode = localStorage.getItem("ingredientExclusionMode") === "true";
 let requestedDays = [];
 let requestedConditions = Array.from({ length: 7 }, () => []);
+let requestedMenuAssignments = [];
+let requestedMenuIssues = [];
 
 const {
   normalizeVegetable,
@@ -300,20 +309,57 @@ function syncWeekdayTabs() {
   });
 }
 
-function updateRecognizedDays() {
+function loadRequestedMenuAssignments() {
+  try {
+    const savedWeeks = JSON.parse(localStorage.getItem(weeklyRequestedMenusStorageKey) || "{}");
+    const saved = savedWeeks?.[dateStorageKey(currentWeekStart)];
+    if (!Array.isArray(saved)) return [];
+    return restoreRequestedMenuAssignments(saved, menus, createWeekDates(currentWeekStart));
+  } catch {
+    return [];
+  }
+}
+
+function saveRequestedMenuAssignments(assignments) {
+  let savedWeeks = {};
+  try { savedWeeks = JSON.parse(localStorage.getItem(weeklyRequestedMenusStorageKey) || "{}"); } catch { /* 空の保存先を使う */ }
+  if (!savedWeeks || Array.isArray(savedWeeks) || typeof savedWeeks !== "object") savedWeeks = {};
+  savedWeeks[dateStorageKey(currentWeekStart)] = serializeRequestedMenuAssignments(assignments);
+  localStorage.setItem(weeklyRequestedMenusStorageKey, JSON.stringify(savedWeeks));
+}
+
+function updateRecognizedDays({ persistMenus = true } = {}) {
   const request = document.querySelector("#request").value;
   localStorage.setItem("menuRequest", request);
   requestedDays = parseRequestedDays(request);
   requestedConditions = parseRequestedConditions(request);
+  const parsedMenus = parseRequestedMenuResult(request, menus, createWeekDates(currentWeekStart));
+  if (persistMenus || parsedMenus.assignments.length) {
+    saveRequestedMenuAssignments(parsedMenus.issues.length ? [] : parsedMenus.assignments);
+  }
+  requestedMenuAssignments = parsedMenus.issues.length
+    ? []
+    : parsedMenus.assignments.length || persistMenus
+      ? parsedMenus.assignments
+      : loadRequestedMenuAssignments();
+  requestedMenuIssues = parsedMenus.issues;
   syncWeekdayTabs();
   syncAttributeTabs();
   const message = document.querySelector("#recognized-days");
-  if (!requestedDays.length) {
+  if (!requestedDays.length && !requestedMenuAssignments.length && !requestedMenuIssues.length) {
     message.hidden = true;
     message.textContent = "";
     return;
   }
-  message.textContent = `${requestedDays.map(({ day }) => `${day}曜日`).join("・")}を認識しました`;
+  const menuLabels = requestedMenuAssignments.map(({ dayIndex, recipeName }) => `${days[dayIndex]}曜：${recipeName}`);
+  const issueLabels = requestedMenuIssues.map(({ dayIndex, requestedName, status }) => status === "ambiguous"
+    ? `${days[dayIndex]}曜「${requestedName}」は候補が複数あります。料理名をもう少し詳しく入力してください`
+    : `${days[dayIndex]}曜「${requestedName}」は登録済みの料理にありません`);
+  message.textContent = issueLabels.length
+    ? issueLabels.join("。")
+    : menuLabels.length
+    ? `${menuLabels.join("・")} と認識しました`
+    : `${requestedDays.map(({ day }) => `${day}曜日`).join("・")}を認識しました`;
   message.hidden = false;
 }
 
@@ -1841,9 +1887,32 @@ document.querySelectorAll(".app-dialog").forEach(dialog => {
   });
 });
 
-document.querySelector("#load-weekly-request").addEventListener("click", async () => {
-  if (loadingWeeklyRequest || weeklyMenuLocked) return;
+document.querySelector("#load-weekly-request").addEventListener("click", () => {
+  console.log("[requested-menu-loader] button clicked");
+  if (loadingWeeklyRequest) {
+    console.warn("[requested-menu-loader] stopped: already loading");
+    notify("今週の希望を読み込み中です");
+    return;
+  }
+  if (weeklyMenuLocked) {
+    console.warn("[requested-menu-loader] stopped: weekly menu is locked");
+    notify("この週は固定中です。固定を解除してから読み込んでください");
+    return;
+  }
+  console.log("[requested-menu-loader] assignments =", requestedMenuAssignments);
+  console.log("[requested-menu-loader] current week =", {
+    weekStart: visibleWeekKey(),
+    dates: weekDates.map(dateStorageKey)
+  });
+  console.log("[requested-menu-loader] API =", {
+    url: APP_CONFIG.api.baseUrl,
+    requestForWeeklyMenu: "none (localStorage only)"
+  });
   if (visibleWeekKey() !== dateStorageKey(currentWeekStart)) {
+    console.warn("[requested-menu-loader] stopped: visible week is not current week", {
+      visibleWeek: visibleWeekKey(),
+      currentWeek: dateStorageKey(currentWeekStart)
+    });
     notify("今週の希望は、今週を表示しているときに読み込めます");
     return;
   }
@@ -1851,21 +1920,77 @@ document.querySelector("#load-weekly-request").addEventListener("click", async (
   loadingWeeklyRequest = true;
   updateWeeklyLockUI();
   try {
-    await Promise.resolve();
-    const request = document.querySelector("#request").value;
-    const assignments = parseRequestedMenuAssignments(request, menus, weekDates);
+    const parsedMenus = parseRequestedMenuResult(
+      document.querySelector("#request").value,
+      menus,
+      weekDates
+    );
+    requestedMenuAssignments = parsedMenus.assignments;
+    requestedMenuIssues = parsedMenus.issues;
+    console.log("[requested-menu-loader] assignments at click =", requestedMenuAssignments);
+    if (requestedMenuIssues.length) {
+      notify(requestedMenuIssues.some(issue => issue.status === "ambiguous")
+        ? "候補が複数あります。料理名をもう少し詳しく入力してください"
+        : "登録済みの料理名を確認してください");
+      return;
+    }
+    const assignments = requestedMenuAssignments.map(assignment => ({ ...assignment }));
     if (!assignments.length) {
-      notify(request.trim()
+      notify(document.querySelector("#request").value.trim()
         ? "曜日と登録済みの料理名を確認してください"
         : "今週の希望に読み込める献立がありません");
       return;
     }
 
-    selected = applyRequestedMenuAssignments(selected, assignments, weekDates);
-    saveWeeklyMenu();
+    assignments.forEach(({ dayIndex, date, recipeId }) => {
+      const replacementIndex = menus.findIndex(recipe => recipe.id === recipeId);
+      console.log("[requested-menu-loader] target date =", date, { dayIndex });
+      console.log("[requested-menu-loader] recipeId =", recipeId);
+      console.log("[requested-menu-loader] current recipe =", menus[selected[dayIndex]] || null);
+      console.log("[requested-menu-loader] replacement recipe =", menus[replacementIndex] || null);
+    });
+
+    const loadResult = loadRequestedMenuSelection(selected, assignments, weekDates, {
+      recipes: menus,
+      consecutiveRecipeIds: consecutiveIds
+    });
+    const failedAssignment = loadResult.failedAssignment;
+    if (failedAssignment) {
+      notify(`${days[failedAssignment.dayIndex]}曜の希望料理を献立へ反映できませんでした`);
+      return;
+    }
+    selected = loadResult.selection;
+    console.log("[requested-menu-loader] selected after update =", selected.map((menuIndex, dayIndex) => ({
+      date: dateStorageKey(weekDates[dayIndex]),
+      menuIndex,
+      recipeId: menus[menuIndex]?.id || null,
+      recipeName: menus[menuIndex]?.main || null
+    })));
     render();
-    notify(`今週の希望を${assignments.length}日分反映しました`);
-  } catch {
+    console.log("[requested-menu-loader] render result =", assignments.map(({ dayIndex, date, recipeId }) => ({
+      date,
+      expectedRecipeId: recipeId,
+      renderedRecipeId: list.querySelector(`[data-day-index="${dayIndex}"] .recipe-open`)?.dataset.recipe
+        ? menus[Number(list.querySelector(`[data-day-index="${dayIndex}"] .recipe-open`).dataset.recipe)]?.id
+        : null,
+      renderedRecipeName: list.querySelector(`[data-day-index="${dayIndex}"] .recipe-open h3`)?.textContent || null
+    })));
+    console.log("[requested-menu-loader] save start");
+    try {
+      const saveResult = saveWeeklyMenu();
+      console.log("[requested-menu-loader] save result =", saveResult);
+    } catch (saveError) {
+      console.error("[requested-menu-loader] save failed after render", saveError);
+      notify("献立は画面に反映しましたが、端末への保存に失敗しました");
+      return;
+    }
+    const expandedDays = new Set(assignments.map(({ dayIndex }) => dayIndex));
+    assignments.forEach(({ dayIndex, recipeId }) => {
+      if (consecutiveIds.has(recipeId) && dayIndex < 6) expandedDays.add(dayIndex + 1);
+    });
+    notify(`今週の希望を${expandedDays.size}日分反映しました`);
+  } catch (error) {
+    console.error("[requested-menu-loader] failed", error);
     notify("今週の希望を読み込めませんでした。もう一度お試しください");
   } finally {
     loadingWeeklyRequest = false;
@@ -2142,7 +2267,7 @@ if (ingredientExclusionMode) {
   excludedIngredients = parseFoodInput(document.querySelector("#vegetable-input").value);
 }
 updateIngredientExclusionUI();
-updateRecognizedDays();
+updateRecognizedDays({ persistMenus: false });
 updateWeeklyDateUI();
 updateSeasonUI();
 updateBudgetUI();
