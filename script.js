@@ -17,6 +17,7 @@ import { initializeRecipePhoto, resetRecipePhotoUI } from "./js/recipe-photo.js"
 import { initializeFamilySharing } from "./js/family-sharing.js";
 import { recipeRepository } from "./js/recipe-repository.js";
 import { recipeIcon } from "./js/recipe-icon.js";
+import { generateMenuWeek } from "./js/menu-shuffler.js";
 import {
   applyRequestedMenuAssignments,
   loadRequestedMenuSelection,
@@ -337,11 +338,14 @@ function updateRecognizedDays({ persistMenus = true } = {}) {
   if (persistMenus || parsedMenus.assignments.length) {
     saveRequestedMenuAssignments(parsedMenus.issues.length ? [] : parsedMenus.assignments);
   }
+  const shouldRestoreSavedMenus = request.trim() && !persistMenus && !parsedMenus.assignments.length;
   requestedMenuAssignments = parsedMenus.issues.length
     ? []
     : parsedMenus.assignments.length || persistMenus
       ? parsedMenus.assignments
-      : loadRequestedMenuAssignments();
+      : shouldRestoreSavedMenus
+        ? loadRequestedMenuAssignments()
+        : [];
   requestedMenuIssues = parsedMenus.issues;
   syncWeekdayTabs();
   syncAttributeTabs();
@@ -733,56 +737,47 @@ function randomMenu(excludes = [], preferBudget = budgetMode, hardExcludes = [],
   return candidates[Math.floor(Math.random() * candidates.length)].i;
 }
 
+function shuffledIndexes(indexes) {
+  const shuffled = [...indexes];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 function generateWeek(
   preferBudget = budgetMode,
   vegetables = preferredVegetables,
   conditions = requestedConditions,
   unavailableDays = Array(7).fill(false)
 ) {
-  const week = [];
   const seasonalIndexes = conditions
     .map((attributes, index) => attributes.includes("seasonal") ? index : -1)
     .filter(index => index >= 0 && !unavailableDays[index]);
-  const shuffledSeasonalIndexes = [...seasonalIndexes].sort(() => Math.random() - .5);
+  const shuffledSeasonalIndexes = shuffledIndexes(seasonalIndexes);
   const requiredSeasonalIndexes = new Set(
     shuffledSeasonalIndexes.slice(0, Math.min(5, seasonalIndexes.length))
   );
   const effectiveConditions = conditions.map((attributes, index) =>
     attributes.filter(attribute => attribute !== "seasonal")
       .concat(requiredSeasonalIndexes.has(index) ? ["seasonal"] : []));
-  const eligibleConsecutive = menus.map((recipe, index) => ({ recipe, index }))
-    .filter(item => consecutiveIds.has(item.recipe.id) && matchesSeason(item.recipe) && !recipeUsesExcludedIngredient(item.recipe));
-  const possiblePairs = [];
-  eligibleConsecutive.forEach(item => {
-    for (let start = 0; start < 6; start += 1) {
-      if (!unavailableDays[start]
-        && !unavailableDays[start + 1]
-        && matchesAttributes(item.recipe, effectiveConditions[start])
-        && matchesAttributes(item.recipe, effectiveConditions[start + 1])) {
-        possiblePairs.push({ index: item.index, start });
-      }
-    }
+  return generateMenuWeek({
+    recipes: menus,
+    preferBudget,
+    vegetables,
+    conditions: effectiveConditions,
+    unavailableDays,
+    consecutiveRecipeIds: consecutiveIds,
+    requestedAssignments: requestedMenuAssignments,
+    matchesSeason,
+    recipeUsesExcludedIngredient,
+    matchesAttributes,
+    recipeAttributes,
+    vegetableMatchCount,
+    estimateRecipeCost,
+    debug: true
   });
-  const forcedPair = possiblePairs.length
-    ? possiblePairs[Math.floor(Math.random() * possiblePairs.length)]
-    : null;
-  const consecutiveIndexes = eligibleConsecutive.map(item => item.index);
-  while (week.length < 7) {
-    if (forcedPair && week.length === forcedPair.start) {
-      week.push(forcedPair.index, forcedPair.index);
-      continue;
-    }
-    const choice = randomMenu(
-      week,
-      preferBudget,
-      consecutiveIndexes,
-      vegetables,
-      effectiveConditions[week.length] || []
-    );
-    if (choice === null) break;
-    week.push(choice);
-  }
-  return week;
 }
 
 function generateSideWeek(vegetables = preferredVegetables, mainWeek = selected) {
