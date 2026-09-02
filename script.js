@@ -17,6 +17,10 @@ import { initializeRecipePhoto, resetRecipePhotoUI } from "./js/recipe-photo.js"
 import { initializeFamilySharing } from "./js/family-sharing.js";
 import { recipeRepository } from "./js/recipe-repository.js";
 import { recipeIcon } from "./js/recipe-icon.js";
+import {
+  applyRequestedMenuAssignments,
+  parseRequestedMenuAssignments
+} from "./js/requested-menu-loader.js";
 
 const menus = RECIPES;
 const sideDishes = SIDE_DISHES;
@@ -102,6 +106,7 @@ let weeklyMenuLocks = {};
 try { weeklyMenuLocks = JSON.parse(localStorage.getItem(weeklyMenuLocksStorageKey) || "{}"); } catch { weeklyMenuLocks = {}; }
 if (!weeklyMenuLocks || Array.isArray(weeklyMenuLocks) || typeof weeklyMenuLocks !== "object") weeklyMenuLocks = {};
 let weeklyMenuLocked = false;
+let loadingWeeklyRequest = false;
 function createWeekDates(start) {
   return Array.from({ length: 7 }, (_, index) =>
     new Date(start.getFullYear(), start.getMonth(), start.getDate() + index));
@@ -501,6 +506,9 @@ function updateWeeklyLockUI() {
   ["#generate", "#shuffle-partial", "#shuffle-all"].forEach(selector => {
     document.querySelector(selector).disabled = weeklyMenuLocked;
   });
+  const loadRequestButton = document.querySelector("#load-weekly-request");
+  loadRequestButton.disabled = weeklyMenuLocked || loadingWeeklyRequest;
+  loadRequestButton.textContent = loadingWeeklyRequest ? "読み込み中…" : "↓ 今週の希望を読み込む";
   document.querySelectorAll("#season-buttons button").forEach(button => {
     button.disabled = weeklyMenuLocked;
   });
@@ -1831,6 +1839,38 @@ document.querySelectorAll(".app-dialog").forEach(dialog => {
   dialog.addEventListener("click", event => {
     if (event.target === dialog || event.target.closest(".close-dialog")) dialog.close();
   });
+});
+
+document.querySelector("#load-weekly-request").addEventListener("click", async () => {
+  if (loadingWeeklyRequest || weeklyMenuLocked) return;
+  if (visibleWeekKey() !== dateStorageKey(currentWeekStart)) {
+    notify("今週の希望は、今週を表示しているときに読み込めます");
+    return;
+  }
+
+  loadingWeeklyRequest = true;
+  updateWeeklyLockUI();
+  try {
+    await Promise.resolve();
+    const request = document.querySelector("#request").value;
+    const assignments = parseRequestedMenuAssignments(request, menus, weekDates);
+    if (!assignments.length) {
+      notify(request.trim()
+        ? "曜日と登録済みの料理名を確認してください"
+        : "今週の希望に読み込める献立がありません");
+      return;
+    }
+
+    selected = applyRequestedMenuAssignments(selected, assignments, weekDates);
+    saveWeeklyMenu();
+    render();
+    notify(`今週の希望を${assignments.length}日分反映しました`);
+  } catch {
+    notify("今週の希望を読み込めませんでした。もう一度お試しください");
+  } finally {
+    loadingWeeklyRequest = false;
+    updateWeeklyLockUI();
+  }
 });
 
 document.querySelector("#shuffle-partial").addEventListener("click", () => {

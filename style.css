@@ -104,6 +104,7 @@ textarea::placeholder { color: #99a198; }
 .weekly-heading h2 { font-size: 25px; }
 .text-button { color: var(--green); background: transparent; border: 0; font-size: 12px; font-weight: 600; cursor: pointer; }
 .weekly-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.load-weekly-request { padding: 9px 12px; border: 1px solid var(--green); border-radius: 10px; }
 .shopping-button { padding: 10px 15px; color: white; background: var(--green); border: 0; border-radius: 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
 .week-navigation { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 10px; margin: 0 0 14px; }
 .week-arrow { display: grid; place-items: center; width: 44px; height: 40px; color: var(--green); background: var(--sage); border: 1px solid transparent; border-radius: 12px; font-size: 20px; cursor: pointer; }
@@ -414,6 +415,7 @@ textarea::placeholder { color: #99a198; }
   .weekly-heading { display: block; }.weekly-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 3px 0 18px; }
   .weekly-actions button { min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; font-size: 11px; }
   .weekly-actions .shopping-button { grid-column: 1 / -1; border-color: var(--green); }
+  .weekly-actions .load-weekly-request { grid-column: 1 / -1; }
   .week-navigation { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 6px; }
   .week-arrow { height: 44px; }
   .week-navigation-center { flex-wrap: wrap; gap: 6px; }
