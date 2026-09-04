@@ -48,9 +48,13 @@ test("D1へ保存する週献立と固定状態を検証する", () => {
     sideRecipeIds: Array(7).fill(null),
     soupRecipeIds: Array(7).fill(null),
     additionalSideIds: Array.from({ length: 7 }, () => []),
-    manuallySelectedDays: [false, true, false, false, false, false, false]
+    manuallySelectedDays: [false, true, false, false, false, false, false],
+    locked: true
   };
   assert.deepEqual(normalizeWeeklyMenu(menu, "2026-08-30")?.manuallySelectedDays, menu.manuallySelectedDays);
+  assert.equal(normalizeWeeklyMenu(menu, "2026-08-30")?.locked, true);
+  assert.equal(normalizeWeeklyMenu({ ...menu, locked: false, unlock: true }, "2026-08-30")?.unlock, true);
+  assert.equal(normalizeWeeklyMenu({ ...menu, locked: "true" }, "2026-08-30"), null);
   assert.equal(normalizeWeeklyMenu({ ...menu, manuallySelectedDays: [true] }, "2026-08-30"), null);
 });
 

@@ -270,7 +270,8 @@ function toSharedWeeklyMenu() {
     sideRecipeIds: selectedRecipeIds(selectedSides, sideDishes),
     soupRecipeIds: selectedRecipeIds(selectedSoups, soups),
     additionalSideIds,
-    manuallySelectedDays
+    manuallySelectedDays,
+    locked: weeklyMenuLocked
   };
 }
 
@@ -293,7 +294,8 @@ function saveWeeklyMenu({ syncRemote = true } = {}) {
     selectedSides,
     selectedSoups,
     additionalSideIds,
-    manuallySelectedDays
+    manuallySelectedDays,
+    locked: weeklyMenuLocked
   };
   savedWeeks[visibleWeekKey()] = savedMenu;
   localStorage.setItem(weeklyMenusStorageKey, JSON.stringify(savedWeeks));
@@ -315,6 +317,7 @@ function applySharedWeeklyMenu(menu) {
   selectedSoups = soupIndexes;
   additionalSideIds = menu.additionalSideIds.map(ids => ids.filter(id => sideDishes.some(recipe => recipe.id === id)));
   manuallySelectedDays = [...menu.manuallySelectedDays];
+  saveVisibleWeekLock(menu.locked === true);
   saveWeeklyMenu({ syncRemote: false });
   return true;
 }
@@ -2133,6 +2136,10 @@ document.querySelector("#load-weekly-request").addEventListener("click", () => {
 document.querySelector("#shuffle-partial").addEventListener("click", async () => {
   await weeklyMenuSaveQueue;
   await syncVisibleWeeklyMenu();
+  if (weeklyMenuLocked) {
+    notify("この週は固定中です。固定を解除してから再提案してください");
+    return;
+  }
   const eatingOutDays = selected.map(menuIndex => menuIndex === null);
   const protectedDays = eatingOutDays.map((isEatingOut, index) => isEatingOut || manuallySelectedDays[index]);
   const reservedRecipeIndexes = selected.filter((menuIndex, index) => manuallySelectedDays[index] && menuIndex !== null);
@@ -2361,10 +2368,24 @@ list.addEventListener("touchend", event => {
   if (Math.abs(deltaX) < 55 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
   changeMobileDay(deltaX < 0 ? 1 : -1);
 }, { passive: true });
-document.querySelector("#lock-weekly-menu").addEventListener("click", () => {
+document.querySelector("#lock-weekly-menu").addEventListener("click", async () => {
+  const unlocking = weeklyMenuLocked;
   saveVisibleWeekLock(!weeklyMenuLocked);
+  saveWeeklyMenu({ syncRemote: false });
   updateWeeklyLockUI();
   render();
+  if (weeklyMenuRepository.isAuthenticated()) {
+    await weeklyMenuSaveQueue;
+    try {
+      const saved = await weeklyMenuRepository.save(toSharedWeeklyMenu(), { unlock: unlocking });
+      applySharedWeeklyMenu(saved);
+      render();
+    } catch (error) {
+      console.warn("[weekly-menu] D1への固定状態の保存に失敗しました", error);
+      notify("固定状態を共有サーバーへ保存できませんでした");
+      return;
+    }
+  }
   notify(weeklyMenuLocked
     ? "この週の献立を固定しました"
     : "この週の献立の固定を解除しました");

@@ -15,10 +15,13 @@ export function normalizeWeeklyMenu(value, weekStart) {
     || !validRecipeIds(value?.sideRecipeIds)
     || !validRecipeIds(value?.soupRecipeIds)
     || !validAdditionalSides(value?.additionalSideIds)
-    || !validFixedDays(value?.manuallySelectedDays)) return null;
+    || !validFixedDays(value?.manuallySelectedDays)
+    || typeof value?.locked !== "boolean"
+    || (value?.unlock !== undefined && typeof value.unlock !== "boolean")) return null;
   return { weekStart, mainRecipeIds: value.mainRecipeIds, sideRecipeIds: value.sideRecipeIds,
     soupRecipeIds: value.soupRecipeIds, additionalSideIds: value.additionalSideIds,
-    manuallySelectedDays: value.manuallySelectedDays };
+    manuallySelectedDays: value.manuallySelectedDays, locked: value.locked,
+    unlock: value.unlock === true };
 }
 
 export async function handleWeeklyMenu(request, env, cors, { weekStart }) {
@@ -32,6 +35,6 @@ export async function handleWeeklyMenu(request, env, cors, { weekStart }) {
   let body;
   try { body = await request.json(); } catch { return jsonError("INVALID_JSON", "週献立を読み取れません。", 400, cors); }
   const menu = normalizeWeeklyMenu(body, weekStart);
-  return menu ? json({ menu: await repo.save(menu) }, 200, cors)
+  return menu ? json({ menu: await repo.save(menu, { allowUnlock: menu.unlock }) }, 200, cors)
     : jsonError("INVALID_WEEKLY_MENU", "週献立の内容が不正です。", 400, cors);
 }

@@ -11,9 +11,9 @@ export const weeklyMenuRepository = {
       throw error;
     }
   },
-  async save(menu) {
+  async save(menu, { unlock = false } = {}) {
     const payload = await apiRequest(`/api/weekly-menus/${encodeURIComponent(menu.weekStart)}`, {
-      method: "PUT", body: menu
+      method: "PUT", body: { ...menu, ...(unlock ? { unlock: true } : {}) }
     });
     return payload.menu;
   }
