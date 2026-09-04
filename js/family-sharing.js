@@ -45,7 +45,7 @@ export function initializeFamilySharing({ getLocalRecipes, applySharedRecipes, o
       localStorage.setItem("d1RecipeMigrationComplete", "true");
       button.textContent = "家族共有中";
       button.dataset.connected = "true";
-      onReady?.();
+      await onReady?.();
     } catch (error) {
       if (error.status === 401) setAuthToken("");
       button.textContent = "家族共有";

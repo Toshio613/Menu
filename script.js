@@ -16,6 +16,7 @@ import { APP_CONFIG } from "./js/app-config.js";
 import { initializeRecipePhoto, resetRecipePhotoUI } from "./js/recipe-photo.js";
 import { initializeFamilySharing } from "./js/family-sharing.js";
 import { recipeRepository } from "./js/recipe-repository.js";
+import { weeklyMenuRepository } from "./js/weekly-menu-repository.js";
 import { recipeIcon } from "./js/recipe-icon.js";
 import { generateMenuWeek } from "./js/menu-shuffler.js";
 import {
@@ -212,7 +213,7 @@ function applySharedRecipes(sharedRecipes) {
   selectedSoups = indicesForRecipeIds(soupIds, soups);
   additionalSideIds = additionalSideIds.map(ids => ids.filter(id => sideDishes.some(recipe => recipe.id === id)));
   updateRecognizedDays({ persistMenus: false });
-  saveWeeklyMenu();
+  saveWeeklyMenu({ syncRemote: false });
   render();
 }
 
@@ -260,7 +261,29 @@ function loadWeeklyMenu() {
   }
 }
 
-function saveWeeklyMenu() {
+let weeklyMenuSaveQueue = Promise.resolve();
+
+function toSharedWeeklyMenu() {
+  return {
+    weekStart: visibleWeekKey(),
+    mainRecipeIds: selectedRecipeIds(selected, menus),
+    sideRecipeIds: selectedRecipeIds(selectedSides, sideDishes),
+    soupRecipeIds: selectedRecipeIds(selectedSoups, soups),
+    additionalSideIds,
+    manuallySelectedDays
+  };
+}
+
+function queueSharedWeeklyMenuSave() {
+  if (!weeklyMenuRepository.isAuthenticated()) return;
+  const snapshot = structuredClone(toSharedWeeklyMenu());
+  weeklyMenuSaveQueue = weeklyMenuSaveQueue
+    .catch(() => {})
+    .then(() => weeklyMenuRepository.save(snapshot))
+    .catch(error => console.warn("[weekly-menu] D1への保存に失敗しました", error));
+}
+
+function saveWeeklyMenu({ syncRemote = true } = {}) {
   let savedWeeks = {};
   try { savedWeeks = JSON.parse(localStorage.getItem(weeklyMenusStorageKey) || "{}"); } catch { /* 空の保存先を使う */ }
   if (!savedWeeks || Array.isArray(savedWeeks) || typeof savedWeeks !== "object") savedWeeks = {};
@@ -274,7 +297,40 @@ function saveWeeklyMenu() {
   };
   savedWeeks[visibleWeekKey()] = savedMenu;
   localStorage.setItem(weeklyMenusStorageKey, JSON.stringify(savedWeeks));
+  if (syncRemote) queueSharedWeeklyMenuSave();
   return savedMenu;
+}
+
+function applySharedWeeklyMenu(menu) {
+  const mainIndexes = indicesForRecipeIds(menu.mainRecipeIds, menus);
+  const sideIndexes = indicesForRecipeIds(menu.sideRecipeIds, sideDishes);
+  const soupIndexes = indicesForRecipeIds(menu.soupRecipeIds, soups);
+  if (!isValidWeeklySelection(mainIndexes, menus)
+    || !isValidWeeklySelection(sideIndexes, sideDishes)
+    || !isValidWeeklySelection(soupIndexes, soups)
+    || !isValidAdditionalSides(menu.additionalSideIds)
+    || !isValidFixedDays(menu.manuallySelectedDays)) return false;
+  selected = mainIndexes;
+  selectedSides = sideIndexes;
+  selectedSoups = soupIndexes;
+  additionalSideIds = menu.additionalSideIds.map(ids => ids.filter(id => sideDishes.some(recipe => recipe.id === id)));
+  manuallySelectedDays = [...menu.manuallySelectedDays];
+  saveWeeklyMenu({ syncRemote: false });
+  return true;
+}
+
+async function syncVisibleWeeklyMenu() {
+  if (!weeklyMenuRepository.isAuthenticated()) return;
+  try {
+    const shared = await weeklyMenuRepository.get(visibleWeekKey());
+    if (shared) {
+      if (applySharedWeeklyMenu(shared)) render();
+      return;
+    }
+    await weeklyMenuRepository.save(toSharedWeeklyMenu());
+  } catch (error) {
+    console.warn("[weekly-menu] D1との同期に失敗しました", error);
+  }
 }
 
 const savedWeeklyMenu = loadWeeklyMenu();
@@ -575,7 +631,7 @@ function updateWeeklyLockUI() {
   document.querySelector("#take-week-off").disabled = weeklyMenuLocked;
 }
 
-function changeVisibleWeek(offset) {
+async function changeVisibleWeek(offset) {
   visibleWeekStart = new Date(visibleWeekStart.getFullYear(), visibleWeekStart.getMonth(), visibleWeekStart.getDate() + offset * 7);
   weekDates = createWeekDates(visibleWeekStart);
   loadVisibleWeekLock();
@@ -592,13 +648,14 @@ function changeVisibleWeek(offset) {
     selectedSoups = generateSoupWeek(preferredVegetables, selected);
     additionalSideIds = Array.from({ length: 7 }, () => []);
     manuallySelectedDays = Array(7).fill(false);
-    saveWeeklyMenu();
+    saveWeeklyMenu({ syncRemote: false });
   }
   list.classList.remove("slide-from-left", "slide-from-right");
   void list.offsetWidth;
   list.classList.add(offset < 0 ? "slide-from-left" : "slide-from-right");
   updateWeeklyDateUI();
   render();
+  await syncVisibleWeeklyMenu();
 }
 
 function scheduleDateRollover() {
@@ -2073,7 +2130,9 @@ document.querySelector("#load-weekly-request").addEventListener("click", () => {
   }
 });
 
-document.querySelector("#shuffle-partial").addEventListener("click", () => {
+document.querySelector("#shuffle-partial").addEventListener("click", async () => {
+  await weeklyMenuSaveQueue;
+  await syncVisibleWeeklyMenu();
   const eatingOutDays = selected.map(menuIndex => menuIndex === null);
   const protectedDays = eatingOutDays.map((isEatingOut, index) => isEatingOut || manuallySelectedDays[index]);
   const reservedRecipeIndexes = selected.filter((menuIndex, index) => manuallySelectedDays[index] && menuIndex !== null);
@@ -2341,7 +2400,10 @@ initializeRecipePhoto({
 initializeFamilySharing({
   getLocalRecipes: () => [...menus, ...sideDishes, ...soups],
   applySharedRecipes,
-  onReady: () => notify("家族の共有レシピと同期しました")
+  onReady: async () => {
+    await syncVisibleWeeklyMenu();
+    notify("家族の共有レシピと週献立を同期しました");
+  }
 });
 
 document.querySelector("#request").value = localStorage.getItem("menuRequest") || "";

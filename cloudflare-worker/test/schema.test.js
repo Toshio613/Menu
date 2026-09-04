@@ -6,6 +6,7 @@ import { normalizeRecipe } from "../src/lib/recipe-validation.js";
 import { createFamilyToken, passwordsMatch, verifyFamilyToken } from "../src/lib/auth.js";
 import { validateRecipeResult } from "../../js/recipe-photo.js";
 import { recipeIcon } from "../../js/recipe-icon.js";
+import { normalizeWeeklyMenu } from "../src/routes/weekly-menus.js";
 
 const recipe = {
   name: "豚の生姜焼き",
@@ -39,6 +40,18 @@ test("D1へ保存するレシピを正規化する", () => {
   });
   assert.equal(normalized?.id, "ginger-pork");
   assert.equal(normalizeRecipe({ ...normalized, category: "dessert" }), null);
+});
+
+test("D1へ保存する週献立と固定状態を検証する", () => {
+  const menu = {
+    mainRecipeIds: ["main-1", "main-2", null, "main-4", "main-5", "main-6", "main-7"],
+    sideRecipeIds: Array(7).fill(null),
+    soupRecipeIds: Array(7).fill(null),
+    additionalSideIds: Array.from({ length: 7 }, () => []),
+    manuallySelectedDays: [false, true, false, false, false, false, false]
+  };
+  assert.deepEqual(normalizeWeeklyMenu(menu, "2026-08-30")?.manuallySelectedDays, menu.manuallySelectedDays);
+  assert.equal(normalizeWeeklyMenu({ ...menu, manuallySelectedDays: [true] }, "2026-08-30"), null);
 });
 
 test("旧形式や絵文字欠落データの料理アイコンを復元する", () => {

@@ -1,6 +1,7 @@
 import { handleRecipePhoto } from "./routes/recipe-photo.js";
 import { handleLogin } from "./routes/auth.js";
 import { handleRecipeImport, handleRecipeItem, handleRecipeList } from "./routes/recipes.js";
+import { handleWeeklyMenu } from "./routes/weekly-menus.js";
 import { requireFamilyAuth } from "./lib/auth.js";
 import { corsHeaders, isAllowedOrigin } from "./lib/cors.js";
 import { jsonError } from "./lib/http.js";
@@ -10,6 +11,10 @@ function routeFor(method, pathname) {
   if (method === "POST" && pathname === "/api/analyze-recipe") return { handler: handleRecipePhoto };
   if (pathname === "/api/recipes" && ["GET", "POST"].includes(method)) return { handler: handleRecipeList, auth: true };
   if (method === "POST" && pathname === "/api/recipes/import") return { handler: handleRecipeImport, auth: true };
+  const weeklyMenuMatch = pathname.match(/^\/api\/weekly-menus\/(\d{4}-\d{2}-\d{2})$/);
+  if (weeklyMenuMatch && ["GET", "PUT"].includes(method)) {
+    return { handler: handleWeeklyMenu, auth: true, params: { weekStart: weeklyMenuMatch[1] } };
+  }
   const match = pathname.match(/^\/api\/recipes\/([^/]+)$/);
   if (match && ["GET", "PUT", "DELETE"].includes(method)) {
     return { handler: handleRecipeItem, auth: true, params: { id: decodeURIComponent(match[1]) } };
