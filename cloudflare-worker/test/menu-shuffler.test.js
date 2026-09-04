@@ -60,6 +60,19 @@ test("30品程度から1000回シャッフルして特定料理が毎回採用�
   assert.ok([...counts.values()].every(count => count < 1000));
 });
 
+test("固定日の料理は一部再提案の抽選候補から除外する", () => {
+  const recipes = createRecipes(30);
+  const fixedRecipeIndex = 0;
+  const shuffled = shuffleWeek(recipes, {
+    unavailableDays: [false, false, true, false, false, false, false],
+    reservedRecipeIndexes: [fixedRecipeIndex],
+    random: () => 0
+  });
+
+  assert.equal(shuffled[2], null);
+  assert.equal(shuffled.includes(fixedRecipeIndex), false);
+});
+
 test("今週の希望を反映した週では指定曜日にカレーが入る", () => {
   const recipes = createRecipes(30);
   const dates = weekStarting(2026, 7, 30);

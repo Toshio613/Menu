@@ -162,6 +162,24 @@
   <dialog id="recipe-dialog" class="app-dialog">
     <div class="dialog-content" id="recipe-content"></div>
   </dialog>
+  <dialog id="day-change-dialog" class="app-dialog day-change-dialog">
+    <div class="dialog-content">
+      <div class="dialog-head"><div><p class="eyebrow">CHANGE MENU</p><h2 id="day-change-title">この日の献立を変える</h2></div><button class="close-dialog" type="button" aria-label="閉じる">×</button></div>
+      <p class="dialog-note">変更方法を選んでください。</p>
+      <div class="day-change-actions">
+        <button id="shuffle-one-day" type="button"><span aria-hidden="true">🎲</span><strong>この日だけシャッフル</strong><small>ほかの日は変更しません</small></button>
+        <button id="choose-existing-menu" type="button"><span aria-hidden="true">📋</span><strong>既存メニューから選ぶ</strong><small>選んだ日は自動再提案から固定します</small></button>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="main-dish-picker-dialog" class="app-dialog main-dish-picker-dialog">
+    <div class="dialog-content">
+      <div class="dialog-head"><div><p class="eyebrow">SELECT MENU</p><h2 id="main-dish-picker-title">既存メニューから選ぶ</h2></div><button class="close-dialog" type="button" aria-label="閉じる">×</button></div>
+      <p class="dialog-note">登録済みの主菜から選択してください。副菜と汁物は主菜に合わせて提案します。</p>
+      <label class="main-dish-search"><span>料理名・食材</span><input id="main-dish-search-input" type="search" autocomplete="off" placeholder="例：カレー、豚肉"></label>
+      <div id="main-dish-search-results" class="main-dish-search-results" aria-live="polite"></div>
+    </div>
+  </dialog>
   <dialog id="recipe-edit-dialog" class="app-dialog recipe-edit-dialog">
     <form id="recipe-edit-form" class="dialog-content">
       <div class="dialog-head">

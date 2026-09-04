@@ -208,6 +208,8 @@ textarea::placeholder { color: #99a198; }
 .recipe-open { display: block; width: 100%; padding: 0; color: inherit; background: transparent; border: 0; text-align: left; cursor: pointer; }
 .detail-link { display: block; margin-top: 10px; color: var(--orange); font-size: 9px; font-weight: 600; }
 .retry { width: 100%; margin-top: 14px; padding: 7px; color: var(--green); background: #f2f4ef; border: 0; border-radius: 8px; font-size: 10px; cursor: pointer; }
+.fixed-day-badge { display: inline-flex; align-items: center; gap: 3px; margin: 0 0 7px 6px; padding: 3px 7px; color: var(--green-dark); background: var(--sage); border-radius: 12px; font-size: 8px; font-weight: 700; vertical-align: middle; }
+.fixed-day-mobile { display: none; }
 .simple-retry { width: 100%; margin-top: 6px; padding: 7px; color: var(--orange); background: transparent; border: 1px solid color-mix(in srgb, var(--orange) 35%, transparent); border-radius: 8px; font-size: 10px; font-weight: 600; cursor: pointer; }
 .simple-retry:disabled { color: #adb2ac; border-color: var(--line); cursor: not-allowed; }
 .favorite-retry { width: 100%; margin-top: 6px; padding: 7px; color: #b85d51; background: transparent; border: 1px solid #e8c5be; border-radius: 8px; font-size: 10px; font-weight: 600; cursor: pointer; }
@@ -243,6 +245,13 @@ textarea::placeholder { color: #99a198; }
 .family-login-submit { width: 100%; margin-top: 18px; padding: 13px; color: white; background: var(--green); border: 0; border-radius: 11px; font-weight: 700; cursor: pointer; }
 .app-dialog { width: min(calc(100% - 28px), 580px); max-height: min(86vh, 760px); padding: 0; color: var(--ink); background: var(--paper); border: 0; border-radius: 24px; box-shadow: 0 24px 80px rgba(29,43,34,.28); }
 .app-dialog::backdrop { background: rgba(32,43,36,.55); backdrop-filter: blur(3px); }
+.day-change-dialog { max-width: 430px; }
+.day-change-actions { display: grid; gap: 10px; }
+.day-change-actions button { display: grid; grid-template-columns: 40px 1fr; align-items: center; min-height: 70px; padding: 12px 15px; color: var(--ink); background: #f6f6f0; border: 1px solid var(--line); border-radius: 14px; text-align: left; cursor: pointer; }
+.day-change-actions button > span { grid-row: 1 / 3; font-size: 24px; }
+.day-change-actions strong, .day-change-actions small { display: block; }.day-change-actions strong { font-size: 13px; }.day-change-actions small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.main-dish-search { display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }.main-dish-search input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+.main-dish-search-results { display: grid; gap: 8px; margin-top: 14px; }.main-dish-search-result { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 10px; width: 100%; min-height: 66px; padding: 10px 12px; color: inherit; background: #f7f7f2; border: 1px solid var(--line); border-radius: 12px; text-align: left; cursor: pointer; }.main-dish-search-result > span:first-child { font-size: 23px; text-align: center; }.main-dish-search-result strong, .main-dish-search-result small { display: block; }.main-dish-search-result strong { font: 500 13px "Kiwi Maru", serif; }.main-dish-search-result small { margin-top: 4px; color: var(--muted); font-size: 9px; }.main-dish-search-result b { color: var(--green); font-size: 10px; }.main-dish-search-empty { padding: 18px; color: var(--muted); background: #f7f7f2; border-radius: 12px; text-align: center; font-size: 11px; }
 .dialog-content { padding: 30px; }
 .dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .back-to-list { margin: -8px 0 20px; padding: 7px 11px; color: var(--green); background: var(--sage); border: 0; border-radius: 20px; font-size: 11px; font-weight: 600; cursor: pointer; }
@@ -483,6 +492,7 @@ textarea::placeholder { color: #99a198; }
   .menu-list .menu-card.mobile-day-active { display: block; animation: mobile-day-in .2s ease-out; }
   .menu-list .menu-card.eating-out.mobile-day-active { display: flex; }
   .menu-card .day-row { display: none; }
+  .fixed-day-mobile { display: inline-flex; margin-left: 0; }
   .menu-card .recipe-open { min-height: 118px; padding: 14px; background: #f8f7f1; border-radius: 14px; }
   .menu-card .dish-icon { width: 58px; height: 58px; margin-bottom: 10px; font-size: 30px; }
   .menu-card .dish-kind { margin-bottom: 5px; font-size: 11px; }

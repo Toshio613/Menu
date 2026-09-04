@@ -28,10 +28,11 @@ function buildCandidates(items, {
   if (attributeMatches.length) return attributeMatches;
 
   candidates = eligibleRecipeItems(recipes, { matchesSeason, recipeUsesExcludedIngredient })
-    .filter(item => matchesAttributes(item.recipe, attributes));
+    .filter(item => !blocked.has(item.index) && matchesAttributes(item.recipe, attributes));
   if (candidates.length) return candidates;
 
-  const seasonalCandidates = eligibleRecipeItems(recipes, { matchesSeason, recipeUsesExcludedIngredient });
+  const seasonalCandidates = eligibleRecipeItems(recipes, { matchesSeason, recipeUsesExcludedIngredient })
+    .filter(item => !blocked.has(item.index));
   if (!seasonalCandidates.length) return [];
   const bestAttributeScore = Math.max(...seasonalCandidates.map(item =>
     attributes.filter(attribute => recipeAttributes(item.recipe).includes(attribute)).length));
@@ -123,6 +124,7 @@ export function generateMenuWeek({
   unavailableDays = Array(daysCount).fill(false),
   consecutiveRecipeIds = new Set(),
   requestedAssignments = [],
+  reservedRecipeIndexes = [],
   matchesSeason,
   recipeUsesExcludedIngredient,
   matchesAttributes,
@@ -147,7 +149,7 @@ export function generateMenuWeek({
     debugState.currentDayIndex = week.length;
     const choice = randomMenu({
       recipes,
-      excludes: week.filter(index => index !== null),
+      excludes: [...reservedRecipeIndexes, ...week.filter(index => index !== null)],
       preferBudget,
       vegetables,
       attributes: conditions[week.length] || [],

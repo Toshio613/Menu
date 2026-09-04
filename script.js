@@ -188,6 +188,7 @@ function initialSoupSelection() {
   return [...seasonal, ...regular.slice(0, 2)];
 }
 let selectedSoups = initialSoupSelection();
+let manuallySelectedDays = Array(7).fill(false);
 
 function selectedRecipeIds(selection, recipes) {
   return selection.map(index => Number.isInteger(index) ? recipes[index]?.id || null : null);
@@ -228,6 +229,10 @@ function isValidAdditionalSides(selection) {
     && selection.every(ids => Array.isArray(ids) && ids.every(id => typeof id === "string"));
 }
 
+function isValidFixedDays(value) {
+  return Array.isArray(value) && value.length === 7 && value.every(item => typeof item === "boolean");
+}
+
 function loadWeeklyMenu() {
   try {
     const parsedWeeks = JSON.parse(localStorage.getItem(weeklyMenusStorageKey) || "{}");
@@ -246,6 +251,9 @@ function loadWeeklyMenu() {
     saved.additionalSideIds = isValidAdditionalSides(saved.additionalSideIds)
       ? saved.additionalSideIds
       : Array.from({ length: 7 }, () => []);
+    saved.manuallySelectedDays = isValidFixedDays(saved.manuallySelectedDays)
+      ? saved.manuallySelectedDays
+      : Array(7).fill(false);
     return saved;
   } catch {
     return null;
@@ -261,7 +269,8 @@ function saveWeeklyMenu() {
     selected,
     selectedSides,
     selectedSoups,
-    additionalSideIds
+    additionalSideIds,
+    manuallySelectedDays
   };
   savedWeeks[visibleWeekKey()] = savedMenu;
   localStorage.setItem(weeklyMenusStorageKey, JSON.stringify(savedWeeks));
@@ -274,6 +283,7 @@ if (savedWeeklyMenu) {
   selectedSides = savedWeeklyMenu.selectedSides;
   selectedSoups = savedWeeklyMenu.selectedSoups;
   additionalSideIds = savedWeeklyMenu.additionalSideIds;
+  manuallySelectedDays = savedWeeklyMenu.manuallySelectedDays;
 }
 
 const list = document.querySelector("#menu-list");
@@ -575,11 +585,13 @@ function changeVisibleWeek(offset) {
     selectedSides = saved.selectedSides;
     selectedSoups = saved.selectedSoups;
     additionalSideIds = saved.additionalSideIds;
+    manuallySelectedDays = saved.manuallySelectedDays;
   } else {
     selected = generateWeek(budgetMode, preferredVegetables);
     selectedSides = generateSideWeek(preferredVegetables, selected);
     selectedSoups = generateSoupWeek(preferredVegetables, selected);
     additionalSideIds = Array.from({ length: 7 }, () => []);
+    manuallySelectedDays = Array(7).fill(false);
     saveWeeklyMenu();
   }
   list.classList.remove("slide-from-left", "slide-from-right");
@@ -656,7 +668,8 @@ function render() {
       .map(id => sideDishes.find(recipe => recipe.id === id))
       .filter(Boolean);
     return `<article class="menu-card ${today ? "today" : ""}" data-day-index="${index}">
-      <div class="day-row"><span class="day">${days[index]}</span><span class="date">${cardDateLabel(date)}</span></div>
+      <div class="day-row"><span class="day">${days[index]}${manuallySelectedDays[index] ? '<small class="fixed-day-badge fixed-day-inline">🔒 固定中</small>' : ""}</span><span class="date">${cardDateLabel(date)}</span></div>
+      ${manuallySelectedDays[index] ? '<span class="fixed-day-badge fixed-day-mobile">🔒 固定中</span>' : ""}
       <button class="recipe-open" type="button" data-recipe="${menuIndex}" aria-label="${escapeHtml(menu.main)}のレシピを見る">
         <div class="dish-icon season-${menu.season}" aria-hidden="true">${escapeHtml(recipeIcon(menu))}</div>
         <span class="dish-kind">主菜</span><h3>${escapeHtml(menu.main)}</h3><span class="detail-link">レシピを見る →</span>
@@ -750,7 +763,8 @@ function generateWeek(
   preferBudget = budgetMode,
   vegetables = preferredVegetables,
   conditions = requestedConditions,
-  unavailableDays = Array(7).fill(false)
+  unavailableDays = Array(7).fill(false),
+  reservedRecipeIndexes = []
 ) {
   const seasonalIndexes = conditions
     .map((attributes, index) => attributes.includes("seasonal") ? index : -1)
@@ -770,6 +784,7 @@ function generateWeek(
     unavailableDays,
     consecutiveRecipeIds: consecutiveIds,
     requestedAssignments: requestedMenuAssignments,
+    reservedRecipeIndexes,
     matchesSeason,
     recipeUsesExcludedIngredient,
     matchesAttributes,
@@ -884,6 +899,7 @@ list.addEventListener("click", (event) => {
     selectedSides = generateSideWeek(preferredVegetables, selected);
     selectedSoups = generateSoupWeek(preferredVegetables, selected);
     additionalSideIds = Array.from({ length: 7 }, () => []);
+    manuallySelectedDays = Array(7).fill(false);
     saveWeeklyMenu();
     renderKeepingScrollPosition();
     notify("一週間の献立を戻しました");
@@ -1005,7 +1021,12 @@ list.addEventListener("click", (event) => {
   }
   const button = event.target.closest(".retry");
   if (!button) return;
-  const index = Number(button.dataset.index);
+  dayChangeIndex = Number(button.dataset.index);
+  document.querySelector("#day-change-title").textContent = `${days[dayChangeIndex]}曜日の献立を変える`;
+  dayChangeDialog.showModal();
+});
+
+function shuffleOneDay(index) {
   const replacement = randomMenu(
     [selected[index - 1], selected[index + 1]].filter(value => value !== undefined),
     budgetMode,
@@ -1015,9 +1036,10 @@ list.addEventListener("click", (event) => {
   );
   if (replacement === null) {
     notify("この条件で選べる別の料理がありません");
-    return;
+    return false;
   }
-  applyDayReplacement(index, replacement);
+  selected[index] = replacement;
+  manuallySelectedDays[index] = false;
   const sideReplacement = randomSideDish(selectedSides.filter((_, day) => day !== index), preferredVegetables, menus[replacement]);
   if (sideReplacement !== null) selectedSides[index] = sideReplacement;
   const soupReplacement = randomSoup(index);
@@ -1025,7 +1047,8 @@ list.addEventListener("click", (event) => {
   saveWeeklyMenu();
   render();
   notify(`${days[index]}曜日の献立を変えました`);
-});
+  return true;
+}
 
 const recipeDialog = document.querySelector("#recipe-dialog");
 const recipeEditDialog = document.querySelector("#recipe-edit-dialog");
@@ -1033,6 +1056,9 @@ const shoppingDialog = document.querySelector("#shopping-dialog");
 const recipesDialog = document.querySelector("#recipes-dialog");
 const favoritesDialog = document.querySelector("#favorites-dialog");
 const sideDishPickerDialog = document.querySelector("#side-dish-picker-dialog");
+const dayChangeDialog = document.querySelector("#day-change-dialog");
+const mainDishPickerDialog = document.querySelector("#main-dish-picker-dialog");
+let dayChangeIndex = null;
 let sideDishPickerDayIndex = null;
 let dishPickerMode = "add-side";
 let recipeReturnContext = null;
@@ -1678,6 +1704,59 @@ function openSideDishPicker(dayIndex, mode = "add-side") {
   input.focus();
 }
 
+function mainDishCategoryLabel(recipe) {
+  if (recipeMealType(recipe) === "noodle") return "麺類";
+  return { japanese: "和食", western: "洋食", chinese: "中華" }[recipeCuisine(recipe)] || "主菜";
+}
+
+function renderMainDishSearchResults() {
+  const input = document.querySelector("#main-dish-search-input");
+  const query = toHiragana(input.value.trim()).normalize("NFKC").toLowerCase();
+  const matches = menus.filter(recipe => !query || dishSearchText(recipe).includes(query));
+  document.querySelector("#main-dish-search-results").innerHTML = matches.length
+    ? matches.map(recipe => `<button class="main-dish-search-result" type="button" data-select-main-dish="${recipe.id}">
+      <span aria-hidden="true">${escapeHtml(recipeIcon(recipe))}</span><span><strong>${escapeHtml(recipe.main)}</strong><small>${mainDishCategoryLabel(recipe)}・約${recipe.time}分</small></span><b>選ぶ</b>
+    </button>`).join("")
+    : `<p class="main-dish-search-empty">「${escapeHtml(input.value.trim())}」に一致する登録済みメニューはありません。</p>`;
+}
+
+document.querySelector("#shuffle-one-day").addEventListener("click", () => {
+  if (dayChangeIndex === null || weeklyMenuLocked) return;
+  const index = dayChangeIndex;
+  dayChangeDialog.close();
+  shuffleOneDay(index);
+});
+
+document.querySelector("#choose-existing-menu").addEventListener("click", () => {
+  if (dayChangeIndex === null || weeklyMenuLocked) return;
+  document.querySelector("#main-dish-picker-title").textContent = `${days[dayChangeIndex]}曜日の主菜を選ぶ`;
+  const input = document.querySelector("#main-dish-search-input");
+  input.value = "";
+  renderMainDishSearchResults();
+  dayChangeDialog.close();
+  mainDishPickerDialog.showModal();
+  input.focus();
+});
+
+document.querySelector("#main-dish-search-input").addEventListener("input", renderMainDishSearchResults);
+document.querySelector("#main-dish-search-results").addEventListener("click", event => {
+  const button = event.target.closest("[data-select-main-dish]");
+  if (!button || dayChangeIndex === null || weeklyMenuLocked) return;
+  const replacement = menus.findIndex(recipe => recipe.id === button.dataset.selectMainDish);
+  if (replacement < 0) return;
+  const index = dayChangeIndex;
+  selected[index] = replacement;
+  manuallySelectedDays[index] = true;
+  const sideReplacement = randomSideDish(selectedSides.filter((_, day) => day !== index), preferredVegetables, menus[replacement]);
+  if (sideReplacement !== null) selectedSides[index] = sideReplacement;
+  const soupReplacement = randomSoup(index);
+  if (soupReplacement !== null) selectedSoups[index] = soupReplacement;
+  saveWeeklyMenu();
+  mainDishPickerDialog.close();
+  render();
+  notify(`${days[index]}曜日を「${menus[replacement].main}」に変更し、固定しました`);
+});
+
 document.querySelector("#side-dish-search-input").addEventListener("input", renderSideDishSearchResults);
 document.querySelector("#side-dish-search-results").addEventListener("click", event => {
   const button = event.target.closest("[data-select-additional-side]");
@@ -1810,6 +1889,7 @@ document.addEventListener("click", async event => {
     selectedSides = generateSideWeek([], selected);
     selectedSoups = generateSoupWeek([], selected);
     additionalSideIds = Array.from({ length: 7 }, () => []);
+    manuallySelectedDays = Array(7).fill(false);
     saveWeeklyMenu();
     updateSeasonUI();
     render();
@@ -1995,17 +2075,22 @@ document.querySelector("#load-weekly-request").addEventListener("click", () => {
 
 document.querySelector("#shuffle-partial").addEventListener("click", () => {
   const eatingOutDays = selected.map(menuIndex => menuIndex === null);
-  const regeneratedMenus = generateWeek(budgetMode, preferredVegetables, requestedConditions, eatingOutDays);
+  const protectedDays = eatingOutDays.map((isEatingOut, index) => isEatingOut || manuallySelectedDays[index]);
+  const reservedRecipeIndexes = selected.filter((menuIndex, index) => manuallySelectedDays[index] && menuIndex !== null);
+  const previousMenus = [...selected];
+  const previousSides = [...selectedSides];
+  const previousSoups = [...selectedSoups];
+  const regeneratedMenus = generateWeek(budgetMode, preferredVegetables, requestedConditions, protectedDays, reservedRecipeIndexes);
   const regeneratedSides = generateSideWeek(preferredVegetables, regeneratedMenus);
   const regeneratedSoups = generateSoupWeek(preferredVegetables, regeneratedMenus);
-  selected = regeneratedMenus.map((menuIndex, index) => eatingOutDays[index] ? null : menuIndex);
-  selectedSides = regeneratedSides.map((sideIndex, index) => eatingOutDays[index] ? null : sideIndex);
-  selectedSoups = regeneratedSoups.map((soupIndex, index) => eatingOutDays[index] ? null : soupIndex);
+  selected = regeneratedMenus.map((menuIndex, index) => protectedDays[index] ? previousMenus[index] : menuIndex);
+  selectedSides = regeneratedSides.map((sideIndex, index) => protectedDays[index] ? previousSides[index] : sideIndex);
+  selectedSoups = regeneratedSoups.map((soupIndex, index) => protectedDays[index] ? previousSoups[index] : soupIndex);
   saveWeeklyMenu();
   render();
-  const fixedCount = eatingOutDays.filter(Boolean).length;
-  notify(fixedCount
-    ? `外食・サボり日${fixedCount}日を残して再提案しました`
+  const protectedCount = protectedDays.filter(Boolean).length;
+  notify(protectedCount
+    ? `固定中・お休みの${protectedCount}日を残して再提案しました`
     : "一週間の献立を再提案しました");
 });
 
@@ -2014,6 +2099,7 @@ document.querySelector("#shuffle-all").addEventListener("click", () => {
   selectedSides = generateSideWeek();
   selectedSoups = generateSoupWeek();
   additionalSideIds = Array.from({ length: 7 }, () => []);
+  manuallySelectedDays = Array(7).fill(false);
   saveWeeklyMenu();
   shoppingExtras.fruit = "";
   shoppingExtras.sweets = "";
@@ -2036,6 +2122,7 @@ document.querySelector("#take-week-off").addEventListener("click", () => {
   selectedSides = Array(7).fill(null);
   selectedSoups = Array(7).fill(null);
   additionalSideIds = Array.from({ length: 7 }, () => []);
+  manuallySelectedDays = Array(7).fill(false);
   saveWeeklyMenu();
   renderKeepingScrollPosition();
   notify("今週はお休みにしました。ゆっくりしてくださいね");
@@ -2059,6 +2146,7 @@ document.querySelector("#generate").addEventListener("click", () => {
   selectedSides = generateSideWeek(preferredVegetables);
   selectedSoups = generateSoupWeek(preferredVegetables);
   additionalSideIds = Array.from({ length: 7 }, () => []);
+  manuallySelectedDays = Array(7).fill(false);
   saveWeeklyMenu();
   render();
   const vegetableMessage = ingredientExclusionMode && excludedIngredients.length
