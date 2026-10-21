@@ -1,3 +1,9 @@
+import {
+  dayProtectionState,
+  isDayProtected,
+  normalizeDayProtections
+} from "./day-protection.js";
+
 function randomIndex(length, random = Math.random) {
   return Math.floor(random() * length);
 }
@@ -6,9 +12,18 @@ function recipeLabel(recipe) {
   return `${recipe.id || "(no-id)"} / ${recipe.main || "(no-name)"}`;
 }
 
-function eligibleRecipeItems(recipes, { matchesSeason, recipeUsesExcludedIngredient }) {
+function eligibleRecipeItems(recipes, {
+  matchesSeason,
+  recipeUsesExcludedIngredient,
+  allowedRecipeIds = null,
+  candidateFilter = () => true
+}) {
+  const allowed = allowedRecipeIds ? new Set(allowedRecipeIds) : null;
   return recipes.map((recipe, index) => ({ recipe, index }))
-    .filter(item => matchesSeason(item.recipe) && !recipeUsesExcludedIngredient(item.recipe));
+    .filter(item => matchesSeason(item.recipe)
+      && !recipeUsesExcludedIngredient(item.recipe)
+      && (!allowed || allowed.has(item.recipe.id))
+      && candidateFilter(item.recipe, item.index));
 }
 
 function buildCandidates(items, {
@@ -17,6 +32,8 @@ function buildCandidates(items, {
   recipes,
   matchesSeason,
   recipeUsesExcludedIngredient,
+  allowedRecipeIds,
+  candidateFilter,
   matchesAttributes,
   recipeAttributes
 }) {
@@ -27,11 +44,15 @@ function buildCandidates(items, {
   const attributeMatches = candidates.filter(item => matchesAttributes(item.recipe, attributes));
   if (attributeMatches.length) return attributeMatches;
 
-  candidates = eligibleRecipeItems(recipes, { matchesSeason, recipeUsesExcludedIngredient })
+  candidates = eligibleRecipeItems(recipes, {
+    matchesSeason, recipeUsesExcludedIngredient, allowedRecipeIds, candidateFilter
+  })
     .filter(item => !blocked.has(item.index) && matchesAttributes(item.recipe, attributes));
   if (candidates.length) return candidates;
 
-  const seasonalCandidates = eligibleRecipeItems(recipes, { matchesSeason, recipeUsesExcludedIngredient })
+  const seasonalCandidates = eligibleRecipeItems(recipes, {
+    matchesSeason, recipeUsesExcludedIngredient, allowedRecipeIds, candidateFilter
+  })
     .filter(item => !blocked.has(item.index));
   if (!seasonalCandidates.length) return [];
   const bestAttributeScore = Math.max(...seasonalCandidates.map(item =>
@@ -40,7 +61,7 @@ function buildCandidates(items, {
     attributes.filter(attribute => recipeAttributes(item.recipe).includes(attribute)).length === bestAttributeScore);
 }
 
-function randomMenu({
+export function selectRecipeIndex({
   recipes,
   excludes = [],
   preferBudget = false,
@@ -52,19 +73,28 @@ function randomMenu({
   recipeAttributes,
   vegetableMatchCount,
   estimateRecipeCost,
+  allowedRecipeIds = null,
+  candidateFilter = () => true,
+  candidateRefiner = candidates => candidates,
   random = Math.random,
   debug
 }) {
   const blocked = new Set(Array.isArray(excludes) ? excludes : [excludes]);
-  let candidates = buildCandidates(eligibleRecipeItems(recipes, { matchesSeason, recipeUsesExcludedIngredient }), {
+  let candidates = buildCandidates(eligibleRecipeItems(recipes, {
+    matchesSeason, recipeUsesExcludedIngredient, allowedRecipeIds, candidateFilter
+  }), {
     blocked,
     attributes,
     recipes,
     matchesSeason,
     recipeUsesExcludedIngredient,
+    allowedRecipeIds,
+    candidateFilter,
     matchesAttributes,
     recipeAttributes
   });
+  if (!candidates.length) return null;
+  candidates = candidateRefiner([...candidates]);
   if (!candidates.length) return null;
 
   const bestVegetableScore = Math.max(...candidates.map(item => vegetableMatchCount(item.recipe, vegetables)));
@@ -84,6 +114,52 @@ function randomMenu({
     candidateCount: candidates.length
   });
   return picked.index;
+}
+
+export class MenuGenerationError extends Error {
+  constructor(dayIndex) {
+    super(`${dayIndex + 1}日目の条件に合う料理がありません。`);
+    this.name = "MenuGenerationError";
+    this.code = "MENU_CANDIDATES_EXHAUSTED";
+    this.dayIndex = dayIndex;
+  }
+}
+
+export function isMenuDayProtected(recipeId, manuallySelected = false) {
+  return isDayProtected(dayProtectionState(recipeId, { manual: manuallySelected }));
+}
+
+export function mergeProtectedMenuDays(previous, generated, dayProtections = [], weeklyLocked = false) {
+  const legacyManualDays = Array.isArray(dayProtections)
+    && dayProtections.every(item => typeof item === "boolean") ? dayProtections : [];
+  const normalized = normalizeDayProtections(legacyManualDays.length ? null : dayProtections, legacyManualDays);
+  return generated.map((value, dayIndex) =>
+    isDayProtected(dayProtectionState(previous[dayIndex], normalized[dayIndex], weeklyLocked))
+      ? previous[dayIndex]
+      : value);
+}
+
+export function replaceMenuDay(selection, dayIndex, recipeId, {
+  manuallySelectedDays = [],
+  dayProtections = null,
+  weeklyLocked = false,
+  consecutiveRecipeIds = new Set(),
+  allowProtectedOverride = false
+} = {}) {
+  const next = [...selection];
+  const normalized = normalizeDayProtections(dayProtections, manuallySelectedDays);
+  if (!allowProtectedOverride
+    && isDayProtected(dayProtectionState(next[dayIndex], normalized[dayIndex], weeklyLocked))) {
+    return { selection: next, changed: false };
+  }
+  next[dayIndex] = recipeId;
+  const nextDayIndex = dayIndex + 1;
+  if (consecutiveRecipeIds.has(recipeId)
+    && nextDayIndex < next.length
+    && !isDayProtected(dayProtectionState(next[nextDayIndex], normalized[nextDayIndex], weeklyLocked))) {
+    next[nextDayIndex] = recipeId;
+  }
+  return { selection: next, changed: true };
 }
 
 function applyConsecutiveSelections(week, {
@@ -147,7 +223,7 @@ export function generateMenuWeek({
       continue;
     }
     debugState.currentDayIndex = week.length;
-    const choice = randomMenu({
+    const choice = selectRecipeIndex({
       recipes,
       excludes: [...reservedRecipeIndexes, ...week.filter(index => index !== null)],
       preferBudget,
@@ -162,7 +238,7 @@ export function generateMenuWeek({
       random,
       debug: debugState
     });
-    if (choice === null) break;
+    if (choice === null) throw new MenuGenerationError(week.length);
     week.push(choice);
   }
 

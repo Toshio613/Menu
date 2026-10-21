@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateMenuWeek } from "../../js/menu-shuffler.js";
+import {
+  generateMenuWeek,
+  mergeProtectedMenuDays,
+  replaceMenuDay,
+  selectRecipeIndex
+} from "../../js/menu-shuffler.js";
 import {
   applyRequestedMenuAssignments,
   parseRequestedMenuAssignments
@@ -132,4 +137,58 @@ test("ページ再読み込み相当で削除済み希望がなくても通常�
 
   assert.deepEqual(afterReload, firstLoad);
   assert.ok(afterReload.some(index => recipes[index]?.id !== "classic-curry"));
+});
+
+test("候補不足を7日未満の正常結果として返さない", () => {
+  assert.throws(
+    () => shuffleWeek(createRecipes(3), { random: () => 0 }),
+    error => error.code === "MENU_CANDIDATES_EXHAUSTED" && error.dayIndex === 3
+  );
+});
+
+test("1日生成と週生成の先頭日は同じ候補抽出規則を使う", () => {
+  const recipes = createRecipes(10);
+  const options = {
+    recipes,
+    excludes: [],
+    preferBudget: false,
+    vegetables: [],
+    attributes: [],
+    matchesSeason: () => true,
+    recipeUsesExcludedIngredient: () => false,
+    matchesAttributes: () => true,
+    recipeAttributes: () => [],
+    vegetableMatchCount: () => 0,
+    estimateRecipeCost: () => 0,
+    random: () => 0.4
+  };
+  const oneDay = selectRecipeIndex(options);
+  const week = shuffleWeek(recipes, { random: () => 0.4 });
+  assert.equal(week[0], oneDay);
+});
+
+test("固定日と外食日は未固定日の再生成・お気に入り・かんたん経路でも変更しない", () => {
+  const previous = ["fixed", null, "normal"];
+  assert.deepEqual(
+    mergeProtectedMenuDays(previous, ["new-a", "new-b", "new-c"], [true, false, false]),
+    ["fixed", null, "new-c"]
+  );
+  const fixedResult = replaceMenuDay(previous, 0, "favorite", { manuallySelectedDays: [true, false, false] });
+  const offResult = replaceMenuDay(previous, 1, "simple", { manuallySelectedDays: [true, false, false] });
+  assert.equal(fixedResult.changed, false);
+  assert.equal(offResult.changed, false);
+  assert.deepEqual(fixedResult.selection, previous);
+  assert.deepEqual(offResult.selection, previous);
+});
+
+test("連日料理でも翌日の固定・外食状態を上書きしない", () => {
+  const fixedNext = replaceMenuDay(["old", "fixed"], 0, "hotpot", {
+    manuallySelectedDays: [false, true],
+    consecutiveRecipeIds: new Set(["hotpot"])
+  });
+  const offNext = replaceMenuDay(["old", null], 0, "hotpot", {
+    consecutiveRecipeIds: new Set(["hotpot"])
+  });
+  assert.deepEqual(fixedNext.selection, ["hotpot", "fixed"]);
+  assert.deepEqual(offNext.selection, ["hotpot", null]);
 });

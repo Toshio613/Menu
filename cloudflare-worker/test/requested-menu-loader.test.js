@@ -5,6 +5,7 @@ import {
   loadRequestedMenuSelection,
   parseRequestedMenuAssignments,
   parseRequestedMenuResult,
+  regenerateRequestedAccompaniments,
   restoreRequestedMenuAssignments,
   serializeRequestedMenuAssignments
 } from "../../js/requested-menu-loader.js";
@@ -184,4 +185,52 @@ test("読み込み処理で2026/9/2水曜の主菜IDを定番カレーへ変更�
 
   assert.equal(result.failedAssignment, null);
   assert.equal(menuRecipes[result.selection[3]].id, "classic-curry");
+});
+
+test("ID内部状態へ希望料理を反映し、対象日を保護対象として返す", () => {
+  const dates = weekStarting(2026, 7, 30);
+  const assignments = parseRequestedMenuAssignments("火曜 カレー", recipes, dates);
+  const result = loadRequestedMenuSelection(
+    Array(7).fill("fish"), assignments, dates,
+    { recipes, useRecipeIds: true, consecutiveRecipeIds: new Set() }
+  );
+  assert.equal(result.failedAssignment, null);
+  assert.equal(result.selection[2], "curry");
+  assert.deepEqual(result.appliedDayIndexes, [2]);
+});
+
+test("希望料理でも既存の固定日と外食日を上書きしない", () => {
+  const dates = weekStarting(2026, 7, 30);
+  const assignments = parseRequestedMenuAssignments("火曜 カレー\n水曜 カレー", recipes, dates);
+  const result = loadRequestedMenuSelection(
+    ["fish", "fish", "hamburger", null, "fish", "fish", "fish"],
+    assignments,
+    dates,
+    {
+      recipes,
+      useRecipeIds: true,
+      consecutiveRecipeIds: new Set(),
+      protectedDays: [false, false, true, true, false, false, false]
+    }
+  );
+  assert.equal(result.selection[2], "hamburger");
+  assert.equal(result.selection[3], null);
+  assert.ok(result.failedAssignment);
+  assert.deepEqual(result.appliedDayIndexes, []);
+});
+
+test("希望料理を反映した日は副菜と汁物も再生成する", () => {
+  const calls = [];
+  const result = regenerateRequestedAccompaniments(
+    ["s0", "s1", "s2"],
+    ["p0", "p1", "p2"],
+    [1],
+    {
+      generateSide: dayIndex => { calls.push(["side", dayIndex]); return "new-side"; },
+      generateSoup: dayIndex => { calls.push(["soup", dayIndex]); return "new-soup"; }
+    }
+  );
+  assert.deepEqual(result.sideSelection, ["s0", "new-side", "s2"]);
+  assert.deepEqual(result.soupSelection, ["p0", "new-soup", "p2"]);
+  assert.deepEqual(calls, [["side", 1], ["soup", 1]]);
 });

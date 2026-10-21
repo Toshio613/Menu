@@ -56,7 +56,7 @@ export const recipeRepository = {
   async delete(id) {
     await apiRequest(`/api/recipes/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
-  async importOnce(recipes) {
+  async importMissing(recipes) {
     return apiRequest("/api/recipes/import", { method: "POST", body: { recipes: recipes.map(toApiRecipe) }, timeoutMs: 60000 });
   }
 };

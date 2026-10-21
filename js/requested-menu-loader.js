@@ -107,26 +107,33 @@ export function applyRequestedMenuAssignments(
   selection,
   assignments,
   visibleDates,
-  { recipes = [], consecutiveRecipeIds = new Set() } = {}
+  { recipes = [], consecutiveRecipeIds = new Set(), useRecipeIds = false, protectedDays = [] } = {}
 ) {
   const nextSelection = [...selection];
-  const resolveRecipeIndex = ({ recipeId, recipeIndex }) => {
+  const resolveRecipe = ({ recipeId, recipeIndex }) => {
+    if (useRecipeIds) return recipes.some(recipe => recipe.id === recipeId) ? recipeId : null;
     if (recipeId && recipes.length) return recipes.findIndex(recipe => recipe.id === recipeId);
     return Number.isInteger(recipeIndex) ? recipeIndex : -1;
   };
   const explicitlyRequestedDates = new Set(assignments.map(({ date }) => date));
   assignments.forEach(assignment => {
     const { dayIndex, date, recipeId } = assignment;
+    if (protectedDays[dayIndex]) return;
     const nextDayIndex = dayIndex + 1;
     if (!consecutiveRecipeIds.has(recipeId) || nextDayIndex >= visibleDates.length) return;
-    if (dateKey(visibleDates[dayIndex]) !== date || explicitlyRequestedDates.has(dateKey(visibleDates[nextDayIndex]))) return;
-    const resolvedIndex = resolveRecipeIndex(assignment);
-    if (resolvedIndex >= 0) nextSelection[nextDayIndex] = resolvedIndex;
+    if (dateKey(visibleDates[dayIndex]) !== date
+      || protectedDays[nextDayIndex]
+      || explicitlyRequestedDates.has(dateKey(visibleDates[nextDayIndex]))) return;
+    const resolved = resolveRecipe(assignment);
+    if (useRecipeIds ? resolved !== null : resolved >= 0) nextSelection[nextDayIndex] = resolved;
   });
   assignments.forEach(assignment => {
     const { dayIndex, date } = assignment;
-    const resolvedIndex = resolveRecipeIndex(assignment);
-    if (resolvedIndex >= 0 && dateKey(visibleDates[dayIndex]) === date) nextSelection[dayIndex] = resolvedIndex;
+    if (protectedDays[dayIndex]) return;
+    const resolved = resolveRecipe(assignment);
+    if ((useRecipeIds ? resolved !== null : resolved >= 0) && dateKey(visibleDates[dayIndex]) === date) {
+      nextSelection[dayIndex] = resolved;
+    }
   });
   return nextSelection;
 }
@@ -135,6 +142,46 @@ export function loadRequestedMenuSelection(selection, assignments, visibleDates,
   const nextSelection = applyRequestedMenuAssignments(selection, assignments, visibleDates, options);
   const failedAssignment = assignments.find(({ dayIndex, date, recipeId }) =>
     dateKey(visibleDates[dayIndex]) !== date
-      || options.recipes?.[nextSelection[dayIndex]]?.id !== recipeId);
-  return { selection: nextSelection, failedAssignment: failedAssignment || null };
+      || (options.useRecipeIds
+        ? nextSelection[dayIndex] !== recipeId
+        : options.recipes?.[nextSelection[dayIndex]]?.id !== recipeId));
+  const changedDayIndexes = nextSelection
+    .map((value, dayIndex) => value !== selection[dayIndex] ? dayIndex : -1)
+    .filter(dayIndex => dayIndex >= 0);
+  const appliedDayIndexes = new Set(changedDayIndexes);
+  assignments.forEach(({ dayIndex, recipeId }) => {
+    const selectedId = options.useRecipeIds
+      ? nextSelection[dayIndex]
+      : options.recipes?.[nextSelection[dayIndex]]?.id;
+    if (!options.protectedDays?.[dayIndex] && selectedId === recipeId) appliedDayIndexes.add(dayIndex);
+    const nextDayIndex = dayIndex + 1;
+    const nextSelectedId = options.useRecipeIds
+      ? nextSelection[nextDayIndex]
+      : options.recipes?.[nextSelection[nextDayIndex]]?.id;
+    if (options.consecutiveRecipeIds?.has(recipeId)
+      && nextDayIndex < visibleDates.length
+      && !options.protectedDays?.[nextDayIndex]
+      && nextSelectedId === recipeId) appliedDayIndexes.add(nextDayIndex);
+  });
+  return {
+    selection: nextSelection,
+    failedAssignment: failedAssignment || null,
+    changedDayIndexes,
+    appliedDayIndexes: [...appliedDayIndexes]
+  };
+}
+
+export function regenerateRequestedAccompaniments(
+  sideSelection,
+  soupSelection,
+  dayIndexes,
+  { generateSide, generateSoup }
+) {
+  const nextSides = [...sideSelection];
+  const nextSoups = [...soupSelection];
+  for (const dayIndex of dayIndexes) {
+    nextSides[dayIndex] = generateSide(dayIndex, nextSides, nextSoups);
+    nextSoups[dayIndex] = generateSoup(dayIndex, nextSides, nextSoups);
+  }
+  return { sideSelection: nextSides, soupSelection: nextSoups };
 }

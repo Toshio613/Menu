@@ -50,5 +50,5 @@ export async function handleRecipeImport(request, env, cors) {
   if (recipes.some(recipe => !recipe) || new Set(recipes.map(recipe => recipe.id)).size !== recipes.length) {
     return jsonError("INVALID_IMPORT", "移行するレシピに不正または重複したデータがあります。", 400, cors);
   }
-  return json(await repo.importOnce(recipes), 200, cors);
+  return json(await repo.importMissing(recipes), 200, cors);
 }

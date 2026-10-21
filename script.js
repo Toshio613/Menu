@@ -18,11 +18,34 @@ import { initializeFamilySharing } from "./js/family-sharing.js";
 import { recipeRepository } from "./js/recipe-repository.js";
 import { weeklyMenuRepository } from "./js/weekly-menu-repository.js";
 import { recipeIcon } from "./js/recipe-icon.js";
-import { generateMenuWeek } from "./js/menu-shuffler.js";
+import {
+  generateMenuWeek,
+  mergeProtectedMenuDays,
+  replaceMenuDay,
+  selectRecipeIndex
+} from "./js/menu-shuffler.js";
+import {
+  createDayProtections,
+  dayProtectionState,
+  isDayProtected,
+  manualProtectionDays,
+  protectedDayFlags,
+  reconcileRequestedProtections,
+  requestedLoadProtectionFlags,
+  setManualProtection
+} from "./js/day-protection.js";
+import {
+  MENU_DATA_VERSION,
+  migrateWeeklyMenuStorage,
+  normalizeWeeklyMenuRecord,
+  parseWeeklyMenusStorage
+} from "./js/menu-state.js";
+import { createWeeklyMenuSynchronizer } from "./js/weekly-menu-sync.js";
 import {
   applyRequestedMenuAssignments,
   loadRequestedMenuSelection,
   parseRequestedMenuResult,
+  regenerateRequestedAccompaniments,
   restoreRequestedMenuAssignments,
   serializeRequestedMenuAssignments
 } from "./js/requested-menu-loader.js";
@@ -103,7 +126,6 @@ let visibleWeekStart = new Date(currentWeekStart);
 let weekDates = createWeekDates(visibleWeekStart);
 let mobileDayIndex = now.getDay();
 const todayKey = [now.getFullYear(), now.getMonth(), now.getDate()].join("-");
-const weeklyMenuStorageKey = "weeklyMenu";
 const weeklyMenusStorageKey = "weeklyMenus";
 const weeklyRequestedMenusStorageKey = "weeklyRequestedMenus";
 const weeklyMenuLocksStorageKey = "weeklyMenuLocks";
@@ -168,49 +190,72 @@ let activeSeason = localStorage.getItem("menuSeason") || "summer";
 if (!["spring", "summer", "autumn", "winter", "none"].includes(activeSeason)) activeSeason = "summer";
 const matchesSeason = recipe => activeSeason === "none" ? recipe.season === "none" : recipe.season === activeSeason || recipe.season === "none";
 function initialSeasonSelection() {
-  const regular = menus.map((recipe, index) => recipe.season === "none" ? index : -1).filter(index => index >= 0);
+  const regular = menus.filter(recipe => recipe.season === "none").map(recipe => recipe.id);
   if (activeSeason === "none") return regular.slice(0, 7);
-  const seasonal = menus.map((recipe, index) => recipe.season === activeSeason ? index : -1).filter(index => index >= 0);
-  return [...seasonal.slice(0, 5), ...regular.slice(0, 2)];
+  const seasonal = menus.filter(recipe => recipe.season === activeSeason).map(recipe => recipe.id);
+  return [...new Set([...seasonal.slice(0, 5), ...regular, ...menus.map(recipe => recipe.id)])].slice(0, 7);
 }
 let selected = initialSeasonSelection();
 function initialSideSelection() {
-  const regular = sideDishes.map((recipe, index) => recipe.season === "none" ? index : -1).filter(index => index >= 0);
+  const regular = sideDishes.filter(recipe => recipe.season === "none").map(recipe => recipe.id);
   if (activeSeason === "none") return regular.slice(0, 7);
-  const seasonal = sideDishes.map((recipe, index) => recipe.season === activeSeason ? index : -1).filter(index => index >= 0);
-  return [...seasonal.slice(0, 5), ...regular.slice(0, 2)];
+  const seasonal = sideDishes.filter(recipe => recipe.season === activeSeason).map(recipe => recipe.id);
+  return [...new Set([...seasonal.slice(0, 5), ...regular, ...sideDishes.map(recipe => recipe.id)])].slice(0, 7);
 }
 let selectedSides = initialSideSelection();
 let additionalSideIds = Array.from({ length: 7 }, () => []);
 function initialSoupSelection() {
-  const regular = soups.map((recipe, index) => recipe.season === "none" ? index : -1).filter(index => index >= 0);
+  const regular = soups.filter(recipe => recipe.season === "none").map(recipe => recipe.id);
   if (activeSeason === "none") return regular.slice(0, 7);
-  const seasonal = soups.map((recipe, index) => recipe.season === activeSeason ? index : -1).filter(index => index >= 0);
-  return [...seasonal, ...regular.slice(0, 2)];
+  const seasonal = soups.filter(recipe => recipe.season === activeSeason).map(recipe => recipe.id);
+  return [...new Set([...seasonal.slice(0, 5), ...regular, ...soups.map(recipe => recipe.id)])].slice(0, 7);
 }
 let selectedSoups = initialSoupSelection();
-let manuallySelectedDays = Array(7).fill(false);
+let dayProtections = createDayProtections();
 
-function selectedRecipeIds(selection, recipes) {
-  return selection.map(index => Number.isInteger(index) ? recipes[index]?.id || null : null);
+function isProtectedDay(index) {
+  return isDayProtected(dayProtectionState(selected[index], dayProtections[index], weeklyMenuLocked));
 }
 
-function indicesForRecipeIds(ids, recipes) {
-  return ids.map(id => id ? recipes.findIndex(recipe => recipe.id === id) : null)
-    .map(index => index === -1 ? null : index);
+function recipeById(recipes, id) {
+  return id ? recipes.find(recipe => recipe.id === id) || null : null;
+}
+
+function indexForRecipeId(recipes, id) {
+  return id ? recipes.findIndex(recipe => recipe.id === id) : -1;
+}
+
+let weeklyMenuMigration = migrateWeeklyMenuStorage(localStorage, { menus, sideDishes, soups }, {
+  deferLegacy: localStorage.getItem("d1RecipeMigrationComplete") === "true"
+});
+let weeklyMenuMigrationDeferred = weeklyMenuMigration.status === "deferred";
+let weeklyMenuStorageWritable = !["corrupted", "partial", "verification-failed", "write-failed"].includes(weeklyMenuMigration.status);
+if (!weeklyMenuStorageWritable) {
+  console.warn("[weekly-menu] 安全な移行を確認できないため、既存データを上書きせず保存を停止しました", weeklyMenuMigration.status);
 }
 
 function applySharedRecipes(sharedRecipes) {
   sharedRecipes.forEach(recipe => { recipe.icon = recipeIcon(recipe); });
-  const mainIds = selectedRecipeIds(selected, menus);
-  const sideIds = selectedRecipeIds(selectedSides, sideDishes);
-  const soupIds = selectedRecipeIds(selectedSoups, soups);
   menus.splice(0, menus.length, ...sharedRecipes.filter(recipe => !recipe.type));
   sideDishes.splice(0, sideDishes.length, ...sharedRecipes.filter(recipe => recipe.type === "side"));
   soups.splice(0, soups.length, ...sharedRecipes.filter(recipe => recipe.type === "soup"));
-  selected = indicesForRecipeIds(mainIds, menus);
-  selectedSides = indicesForRecipeIds(sideIds, sideDishes);
-  selectedSoups = indicesForRecipeIds(soupIds, soups);
+  if (weeklyMenuMigrationDeferred) {
+    weeklyMenuMigration = migrateWeeklyMenuStorage(localStorage, { menus, sideDishes, soups });
+    weeklyMenuMigrationDeferred = false;
+    weeklyMenuStorageWritable = !["corrupted", "partial", "verification-failed", "write-failed"].includes(weeklyMenuMigration.status);
+  }
+  const saved = loadWeeklyMenu();
+  if (saved) {
+    selected = saved.mainRecipeIds;
+    selectedSides = saved.sideRecipeIds;
+    selectedSoups = saved.soupRecipeIds;
+    additionalSideIds = saved.additionalSideIds;
+    dayProtections = saved.dayProtections;
+  } else {
+    selected = selected.map(id => recipeById(menus, id) ? id : null);
+    selectedSides = selectedSides.map(id => recipeById(sideDishes, id) ? id : null);
+    selectedSoups = selectedSoups.map(id => recipeById(soups, id) ? id : null);
+  }
   additionalSideIds = additionalSideIds.map(ids => ids.filter(id => sideDishes.some(recipe => recipe.id === id)));
   updateRecognizedDays({ persistMenus: false });
   saveWeeklyMenu({ syncRemote: false });
@@ -220,8 +265,8 @@ function applySharedRecipes(sharedRecipes) {
 function isValidWeeklySelection(selection, recipes) {
   return Array.isArray(selection)
     && selection.length === 7
-    && selection.every(index => index === null
-      || (Number.isInteger(index) && index >= 0 && index < recipes.length));
+    && selection.every(id => id === null
+      || (typeof id === "string" && recipes.some(recipe => recipe.id === id)));
 }
 
 function isValidAdditionalSides(selection) {
@@ -230,47 +275,29 @@ function isValidAdditionalSides(selection) {
     && selection.every(ids => Array.isArray(ids) && ids.every(id => typeof id === "string"));
 }
 
-function isValidFixedDays(value) {
-  return Array.isArray(value) && value.length === 7 && value.every(item => typeof item === "boolean");
+function isValidDayProtections(value) {
+  return Array.isArray(value) && value.length === 7
+    && value.every(item => item && typeof item.manual === "boolean" && typeof item.requested === "boolean");
 }
 
-function loadWeeklyMenu() {
-  try {
-    const parsedWeeks = JSON.parse(localStorage.getItem(weeklyMenusStorageKey) || "{}");
-    const savedWeeks = parsedWeeks && !Array.isArray(parsedWeeks) && typeof parsedWeeks === "object" ? parsedWeeks : {};
-    let saved = savedWeeks[visibleWeekKey()];
-    // 旧形式で保存された今週の献立を、新しい週別保存へ引き継ぐ。
-    if (!saved && visibleWeekKey() === dateStorageKey(currentWeekStart)) {
-      const legacy = JSON.parse(localStorage.getItem(weeklyMenuStorageKey));
-      if (legacy?.weekStart === visibleWeekKey()) saved = legacy;
-    }
-    if (!saved
-      || saved.weekStart !== visibleWeekKey()
-      || !isValidWeeklySelection(saved.selected, menus)
-      || !isValidWeeklySelection(saved.selectedSides, sideDishes)
-      || !isValidWeeklySelection(saved.selectedSoups, soups)) return null;
-    saved.additionalSideIds = isValidAdditionalSides(saved.additionalSideIds)
-      ? saved.additionalSideIds
-      : Array.from({ length: 7 }, () => []);
-    saved.manuallySelectedDays = isValidFixedDays(saved.manuallySelectedDays)
-      ? saved.manuallySelectedDays
-      : Array(7).fill(false);
-    return saved;
-  } catch {
-    return null;
-  }
+function loadWeeklyMenu(weekKey = visibleWeekKey()) {
+  if (weeklyMenuMigrationDeferred) return null;
+  const parsed = parseWeeklyMenusStorage(localStorage.getItem(weeklyMenusStorageKey), { menus, sideDishes, soups });
+  if (parsed.corrupted) return null;
+  return parsed.data[weekKey] || null;
 }
 
 let weeklyMenuSaveQueue = Promise.resolve();
 
-function toSharedWeeklyMenu() {
+function toSharedWeeklyMenu(weekKey = visibleWeekKey()) {
   return {
-    weekStart: visibleWeekKey(),
-    mainRecipeIds: selectedRecipeIds(selected, menus),
-    sideRecipeIds: selectedRecipeIds(selectedSides, sideDishes),
-    soupRecipeIds: selectedRecipeIds(selectedSoups, soups),
-    additionalSideIds,
-    manuallySelectedDays,
+    weekStart: weekKey,
+    mainRecipeIds: [...selected],
+    sideRecipeIds: [...selectedSides],
+    soupRecipeIds: [...selectedSoups],
+    additionalSideIds: additionalSideIds.map(ids => [...ids]),
+    dayProtections: structuredClone(dayProtections),
+    manuallySelectedDays: manualProtectionDays(dayProtections),
     locked: weeklyMenuLocked
   };
 }
@@ -289,48 +316,58 @@ function saveWeeklyMenu({ syncRemote = true } = {}) {
   try { savedWeeks = JSON.parse(localStorage.getItem(weeklyMenusStorageKey) || "{}"); } catch { /* 空の保存先を使う */ }
   if (!savedWeeks || Array.isArray(savedWeeks) || typeof savedWeeks !== "object") savedWeeks = {};
   const savedMenu = {
+    version: MENU_DATA_VERSION,
     weekStart: visibleWeekKey(),
-    selected,
-    selectedSides,
-    selectedSoups,
-    additionalSideIds,
-    manuallySelectedDays,
+    mainRecipeIds: [...selected],
+    sideRecipeIds: [...selectedSides],
+    soupRecipeIds: [...selectedSoups],
+    additionalSideIds: additionalSideIds.map(ids => [...ids]),
+    dayProtections: structuredClone(dayProtections),
+    manuallySelectedDays: manualProtectionDays(dayProtections),
     locked: weeklyMenuLocked
   };
   savedWeeks[visibleWeekKey()] = savedMenu;
-  localStorage.setItem(weeklyMenusStorageKey, JSON.stringify(savedWeeks));
-  if (syncRemote) queueSharedWeeklyMenuSave();
+  if (weeklyMenuStorageWritable && !weeklyMenuMigrationDeferred) {
+    localStorage.setItem(weeklyMenusStorageKey, JSON.stringify(savedWeeks));
+  }
+  if (syncRemote && weeklyMenuStorageWritable && !weeklyMenuMigrationDeferred) queueSharedWeeklyMenuSave();
   return savedMenu;
 }
 
-function applySharedWeeklyMenu(menu) {
-  const mainIndexes = indicesForRecipeIds(menu.mainRecipeIds, menus);
-  const sideIndexes = indicesForRecipeIds(menu.sideRecipeIds, sideDishes);
-  const soupIndexes = indicesForRecipeIds(menu.soupRecipeIds, soups);
-  if (!isValidWeeklySelection(mainIndexes, menus)
-    || !isValidWeeklySelection(sideIndexes, sideDishes)
-    || !isValidWeeklySelection(soupIndexes, soups)
-    || !isValidAdditionalSides(menu.additionalSideIds)
-    || !isValidFixedDays(menu.manuallySelectedDays)) return false;
-  selected = mainIndexes;
-  selectedSides = sideIndexes;
-  selectedSoups = soupIndexes;
-  additionalSideIds = menu.additionalSideIds.map(ids => ids.filter(id => sideDishes.some(recipe => recipe.id === id)));
-  manuallySelectedDays = [...menu.manuallySelectedDays];
-  saveVisibleWeekLock(menu.locked === true);
+function applySharedWeeklyMenu(menu, expectedWeekKey = visibleWeekKey()) {
+  if (expectedWeekKey !== visibleWeekKey()) return false;
+  const normalized = normalizeWeeklyMenuRecord({ version: MENU_DATA_VERSION, ...menu }, { menus, sideDishes, soups }, expectedWeekKey);
+  if (!normalized
+    || !isValidWeeklySelection(normalized.mainRecipeIds, menus)
+    || !isValidWeeklySelection(normalized.sideRecipeIds, sideDishes)
+    || !isValidWeeklySelection(normalized.soupRecipeIds, soups)
+    || !isValidAdditionalSides(normalized.additionalSideIds)
+    || !isValidDayProtections(normalized.dayProtections)) return false;
+  selected = normalized.mainRecipeIds;
+  selectedSides = normalized.sideRecipeIds;
+  selectedSoups = normalized.soupRecipeIds;
+  additionalSideIds = normalized.additionalSideIds;
+  dayProtections = normalized.dayProtections;
+  saveVisibleWeekLock(normalized.locked);
   saveWeeklyMenu({ syncRemote: false });
   return true;
 }
 
+const weeklyMenuSynchronizer = createWeeklyMenuSynchronizer({
+  repository: weeklyMenuRepository,
+  getCurrentWeekKey: visibleWeekKey,
+  getLocalMenu: weekKey => weeklyMenuStorageWritable && weekKey === visibleWeekKey()
+    ? toSharedWeeklyMenu(weekKey)
+    : null,
+  applyRemoteMenu: (menu, weekKey) => {
+    if (applySharedWeeklyMenu(menu, weekKey)) render();
+  }
+});
+
 async function syncVisibleWeeklyMenu() {
   if (!weeklyMenuRepository.isAuthenticated()) return;
   try {
-    const shared = await weeklyMenuRepository.get(visibleWeekKey());
-    if (shared) {
-      if (applySharedWeeklyMenu(shared)) render();
-      return;
-    }
-    await weeklyMenuRepository.save(toSharedWeeklyMenu());
+    await weeklyMenuSynchronizer.sync(visibleWeekKey());
   } catch (error) {
     console.warn("[weekly-menu] D1との同期に失敗しました", error);
   }
@@ -338,11 +375,11 @@ async function syncVisibleWeeklyMenu() {
 
 const savedWeeklyMenu = loadWeeklyMenu();
 if (savedWeeklyMenu) {
-  selected = savedWeeklyMenu.selected;
-  selectedSides = savedWeeklyMenu.selectedSides;
-  selectedSoups = savedWeeklyMenu.selectedSoups;
+  selected = savedWeeklyMenu.mainRecipeIds;
+  selectedSides = savedWeeklyMenu.sideRecipeIds;
+  selectedSoups = savedWeeklyMenu.soupRecipeIds;
   additionalSideIds = savedWeeklyMenu.additionalSideIds;
-  manuallySelectedDays = savedWeeklyMenu.manuallySelectedDays;
+  dayProtections = savedWeeklyMenu.dayProtections;
 }
 
 const list = document.querySelector("#menu-list");
@@ -533,7 +570,7 @@ function preferMatchingCuisine(candidates, mainRecipe) {
 if (!savedWeeklyMenu) {
   selectedSides = generateSideWeek([], selected);
   selectedSoups = generateSoupWeek([], selected);
-  saveWeeklyMenu();
+  if (!weeklyMenuMigrationDeferred) saveWeeklyMenu();
 }
 
 function isToday(date) {
@@ -548,9 +585,9 @@ function renderMobileWeekOverview() {
   const start = weekDates[0];
   const end = weekDates[6];
   document.querySelector("#mobile-week-range").textContent = `${start.getMonth() + 1}/${start.getDate()}〜${end.getMonth() + 1}/${end.getDate()}`;
-  document.querySelector("#mobile-week-days").innerHTML = selected.map((menuIndex, index) => {
+  document.querySelector("#mobile-week-days").innerHTML = selected.map((menuId, index) => {
     const date = weekDates[index];
-    const menu = menuIndex === null ? null : menus[menuIndex];
+    const menu = recipeById(menus, menuId);
     const name = menu?.main || "外食・サボり日";
     return `<button type="button" role="tab" data-mobile-day="${index}" aria-label="${date.getMonth() + 1}月${date.getDate()}日 ${days[index]}曜日 ${escapeHtml(name)}">
       <span class="mobile-weekday">${days[index]}</span>
@@ -631,7 +668,8 @@ function updateWeeklyLockUI() {
   document.querySelectorAll("#season-buttons button").forEach(button => {
     button.disabled = weeklyMenuLocked;
   });
-  document.querySelector("#take-week-off").disabled = weeklyMenuLocked;
+  document.querySelector("#take-week-off").disabled = weeklyMenuLocked
+    || dayProtections.some(protection => protection.manual || protection.requested);
 }
 
 async function changeVisibleWeek(offset) {
@@ -640,17 +678,17 @@ async function changeVisibleWeek(offset) {
   loadVisibleWeekLock();
   const saved = loadWeeklyMenu();
   if (saved) {
-    selected = saved.selected;
-    selectedSides = saved.selectedSides;
-    selectedSoups = saved.selectedSoups;
+    selected = saved.mainRecipeIds;
+    selectedSides = saved.sideRecipeIds;
+    selectedSoups = saved.soupRecipeIds;
     additionalSideIds = saved.additionalSideIds;
-    manuallySelectedDays = saved.manuallySelectedDays;
+    dayProtections = saved.dayProtections;
   } else {
     selected = generateWeek(budgetMode, preferredVegetables);
     selectedSides = generateSideWeek(preferredVegetables, selected);
     selectedSoups = generateSoupWeek(preferredVegetables, selected);
     additionalSideIds = Array.from({ length: 7 }, () => []);
-    manuallySelectedDays = Array(7).fill(false);
+    dayProtections = createDayProtections();
     saveWeeklyMenu({ syncRemote: false });
   }
   list.classList.remove("slide-from-left", "slide-from-right");
@@ -672,7 +710,8 @@ function render() {
   renderMobileWeekOverview();
   const allDaysOff = selected.length === 7 && selected.every(menuIndex => menuIndex === null);
   const takeWeekOffButton = document.querySelector("#take-week-off");
-  takeWeekOffButton.disabled = weeklyMenuLocked || allDaysOff;
+  takeWeekOffButton.disabled = weeklyMenuLocked || allDaysOff
+    || dayProtections.some(protection => protection.manual || protection.requested);
   takeWeekOffButton.setAttribute("aria-pressed", String(allDaysOff));
   list.classList.toggle("all-days-off-view", allDaysOff);
   document.querySelector("#mobile-day-navigation").hidden = allDaysOff;
@@ -704,10 +743,10 @@ function render() {
     </div>`;
     return;
   }
-  list.innerHTML = selected.map((menuIndex, index) => {
+  list.innerHTML = selected.map((menuId, index) => {
     const date = weekDates[index];
     const today = isToday(date);
-    const isEatingOut = menuIndex === null;
+    const isEatingOut = menuId === null;
     if (isEatingOut) {
       return `<article class="menu-card eating-out ${today ? "today" : ""}" data-day-index="${index}">
         <div class="day-row"><span class="day">${days[index]}</span><span class="date">${cardDateLabel(date)}</span></div>
@@ -716,48 +755,51 @@ function render() {
           <strong>外食・サボり日</strong>
           <small>今日は作らなくてOK</small>
         </div>
-        <button class="retry" type="button" data-index="${index}" ${weeklyMenuLocked ? "disabled" : ""}>↻ 献立を入れる</button>
+        <button class="retry" type="button" data-index="${index}" disabled>↻ 献立を入れる</button>
       </article>`;
     }
-    const menu = menus[menuIndex];
-    const sideDishIndex = selectedSides[index];
-    const soupIndex = selectedSoups[index];
-    const sideDish = sideDishIndex === null ? null : sideDishes[sideDishIndex];
-    const soup = soupIndex === null ? null : soups[soupIndex];
+    const menu = recipeById(menus, menuId);
+    const sideDishId = selectedSides[index];
+    const soupId = selectedSoups[index];
+    const sideDish = recipeById(sideDishes, sideDishId);
+    const soup = recipeById(soups, soupId);
     const additionalSides = additionalSideIds[index]
       .map(id => sideDishes.find(recipe => recipe.id === id))
       .filter(Boolean);
+    const protection = dayProtections[index];
+    const protectedDay = isProtectedDay(index);
+    const protectionBadges = `${protection.manual ? '<small class="fixed-day-badge">🔒 固定中</small>' : ""}${protection.requested ? '<small class="requested-day-badge">希望</small>' : ""}`;
     return `<article class="menu-card ${today ? "today" : ""}" data-day-index="${index}">
-      <div class="day-row"><span class="day">${days[index]}${manuallySelectedDays[index] ? '<small class="fixed-day-badge fixed-day-inline">🔒 固定中</small>' : ""}</span><span class="date">${cardDateLabel(date)}</span></div>
-      ${manuallySelectedDays[index] ? '<span class="fixed-day-badge fixed-day-mobile">🔒 固定中</span>' : ""}
-      <button class="recipe-open" type="button" data-recipe="${menuIndex}" aria-label="${escapeHtml(menu.main)}のレシピを見る">
+      <div class="day-row"><span class="day">${days[index]}<span class="day-protection-badges">${protectionBadges}</span></span><span class="date">${cardDateLabel(date)}</span></div>
+      <button class="day-lock-button ${protection.manual ? "locked" : ""}" type="button" data-toggle-day-lock="${index}" aria-pressed="${protection.manual}" ${weeklyMenuLocked ? "disabled" : ""}>🔒 ${protection.manual ? "固定中" : "固定する"}</button>
+      <button class="recipe-open" type="button" data-recipe="${menuId}" aria-label="${escapeHtml(menu.main)}のレシピを見る">
         <div class="dish-icon season-${menu.season}" aria-hidden="true">${escapeHtml(recipeIcon(menu))}</div>
         <span class="dish-kind">主菜</span><h3>${escapeHtml(menu.main)}</h3><span class="detail-link">レシピを見る →</span>
       </button>
       <div class="dish-slot ${sideDish ? "" : "empty"}">
-        ${sideDish ? `<button class="side-dish-open" type="button" data-side-recipe="${sideDishIndex}" aria-label="${escapeHtml(sideDish.main)}のレシピを見る">
+        ${sideDish ? `<button class="side-dish-open" type="button" data-side-recipe="${sideDishId}" aria-label="${escapeHtml(sideDish.main)}のレシピを見る">
           <span class="dish-kind">副菜</span><strong>${escapeHtml(recipeIcon(sideDish))} ${escapeHtml(sideDish.main)}</strong>
         </button><button class="remove-dish" type="button" data-remove-side="${index}" aria-label="${days[index]}曜日の副菜を削除" ${weeklyMenuLocked ? "disabled" : ""}>×</button>`
         : '<div class="removed-dish"><span class="dish-kind">副菜</span><small>なし</small></div>'}
         <button class="change-dish-button" type="button" data-change-side-dish="${index}" aria-label="${days[index]}曜日の副菜だけ変える" title="副菜だけ変える" ${weeklyMenuLocked ? "disabled" : ""}>↻</button>
       </div>
       ${additionalSides.map(extraSide => `<div class="dish-slot additional-side">
-        <button class="side-dish-open" type="button" data-side-recipe="${sideDishes.indexOf(extraSide)}" aria-label="${escapeHtml(extraSide.main)}のレシピを見る">
+        <button class="side-dish-open" type="button" data-side-recipe="${extraSide.id}" aria-label="${escapeHtml(extraSide.main)}のレシピを見る">
           <span class="dish-kind">追加の副菜</span><strong>${escapeHtml(recipeIcon(extraSide))} ${escapeHtml(extraSide.main)}</strong>
         </button><button class="remove-dish" type="button" data-remove-additional-side="${index}" data-side-id="${extraSide.id}" aria-label="${days[index]}曜日の追加副菜を削除" ${weeklyMenuLocked ? "disabled" : ""}>×</button>
       </div>`).join("")}
       <button class="add-side-dish-button" type="button" data-add-side-dish="${index}" ${weeklyMenuLocked ? "disabled" : ""}>＋ 副菜を追加</button>
       <div class="dish-slot ${soup ? "" : "empty"}">
-        ${soup ? `<button class="soup-open" type="button" data-soup-recipe="${soupIndex}" aria-label="${escapeHtml(soup.main)}のレシピを見る">
+        ${soup ? `<button class="soup-open" type="button" data-soup-recipe="${soupId}" aria-label="${escapeHtml(soup.main)}のレシピを見る">
           <span class="dish-kind">汁物</span><strong>${escapeHtml(recipeIcon(soup))} ${escapeHtml(soup.main)}</strong>
         </button><button class="remove-dish" type="button" data-remove-soup="${index}" aria-label="${days[index]}曜日の汁物を削除" ${weeklyMenuLocked ? "disabled" : ""}>×</button>`
         : '<div class="removed-dish soup-removed"><span class="dish-kind">汁物</span><small>なし</small></div>'}
         <button class="change-dish-button" type="button" data-change-soup="${index}" aria-label="${days[index]}曜日の汁物だけ変える" title="汁物だけ変える" ${weeklyMenuLocked ? "disabled" : ""}>↻</button>
       </div>
-      <button class="retry" type="button" data-index="${index}" ${weeklyMenuLocked ? "disabled" : ""}>↻ この日を変える</button>
-      <button class="simple-retry" type="button" data-simple-index="${index}" ${!weeklyMenuLocked && compatibleSimpleMenus().length ? "" : "disabled"}>✓ かんたんから選ぶ</button>
-      <button class="favorite-retry" type="button" data-favorite-index="${index}" ${!weeklyMenuLocked && compatibleFavoriteMenus().length ? "" : "disabled"}>♥ お気に入りから選ぶ</button>
-      <button class="eating-out-button" type="button" data-eating-out-index="${index}" ${weeklyMenuLocked ? "disabled" : ""}>☕ 外食・サボり日にする</button>
+      <button class="retry" type="button" data-index="${index}" ${protectedDay ? "disabled" : ""}>↻ この日を変える</button>
+      <button class="simple-retry" type="button" data-simple-index="${index}" ${!protectedDay && compatibleSimpleMenus().length ? "" : "disabled"}>✓ かんたんから選ぶ</button>
+      <button class="favorite-retry" type="button" data-favorite-index="${index}" ${!protectedDay && compatibleFavoriteMenus().length ? "" : "disabled"}>♥ お気に入りから選ぶ</button>
+      <button class="eating-out-button" type="button" data-eating-out-index="${index}" ${protectedDay ? "disabled" : ""}>☕ 外食・サボり日にする</button>
     </article>`;
   }).join("");
   updateMobileDayUI();
@@ -780,34 +822,31 @@ function renderKeepingScrollPosition() {
   if (image && !image.complete) image.addEventListener("load", restorePosition, { once: true });
 }
 
-function randomMenu(excludes = [], preferBudget = budgetMode, hardExcludes = [], vegetables = preferredVegetables, attributes = []) {
-  const blocked = new Set(Array.isArray(excludes) ? excludes : [excludes]);
-  hardExcludes.forEach(index => blocked.add(index));
-  let candidates = menus.map((recipe, i) => ({ recipe, i }))
-    .filter(item => matchesSeason(item.recipe) && !recipeUsesExcludedIngredient(item.recipe) && !blocked.has(item.i));
-  if (!candidates.length) return null;
-  if (attributes.length) {
-    const attributeMatches = candidates.filter(item => matchesAttributes(item.recipe, attributes));
-    candidates = attributeMatches.length
-      ? attributeMatches
-      : menus.map((recipe, i) => ({ recipe, i }))
-        .filter(item => matchesSeason(item.recipe) && !recipeUsesExcludedIngredient(item.recipe) && matchesAttributes(item.recipe, attributes));
-    if (!candidates.length) {
-      const seasonalCandidates = menus.map((recipe, i) => ({ recipe, i }))
-        .filter(item => matchesSeason(item.recipe) && !recipeUsesExcludedIngredient(item.recipe));
-      if (!seasonalCandidates.length) return null;
-      const bestAttributeScore = Math.max(...seasonalCandidates.map(item =>
-        attributes.filter(attribute => recipeAttributes(item.recipe).includes(attribute)).length));
-      candidates = seasonalCandidates.filter(item =>
-        attributes.filter(attribute => recipeAttributes(item.recipe).includes(attribute)).length === bestAttributeScore);
-    }
-  }
-  const bestVegetableScore = Math.max(...candidates.map(item => vegetableMatchCount(item.recipe, vegetables)));
-  if (bestVegetableScore > 0) {
-    candidates = candidates.filter(item => vegetableMatchCount(item.recipe, vegetables) === bestVegetableScore);
-  }
-  if (preferBudget) candidates = candidates.sort((a, b) => estimateRecipeCost(a.recipe) - estimateRecipeCost(b.recipe)).slice(0, 8);
-  return candidates[Math.floor(Math.random() * candidates.length)].i;
+function randomMenu(
+  excludes = [],
+  preferBudget = budgetMode,
+  hardExcludes = [],
+  vegetables = preferredVegetables,
+  attributes = [],
+  allowedRecipeIds = null
+) {
+  const excludedIds = [...(Array.isArray(excludes) ? excludes : [excludes]), ...hardExcludes]
+    .filter(id => id !== null && id !== undefined);
+  const pickedIndex = selectRecipeIndex({
+    recipes: menus,
+    excludes: excludedIds.map(id => indexForRecipeId(menus, id)).filter(index => index >= 0),
+    preferBudget,
+    vegetables,
+    attributes,
+    allowedRecipeIds,
+    matchesSeason,
+    recipeUsesExcludedIngredient,
+    matchesAttributes,
+    recipeAttributes,
+    vegetableMatchCount,
+    estimateRecipeCost
+  });
+  return pickedIndex === null ? null : menus[pickedIndex].id;
 }
 
 function shuffledIndexes(indexes) {
@@ -824,7 +863,7 @@ function generateWeek(
   vegetables = preferredVegetables,
   conditions = requestedConditions,
   unavailableDays = Array(7).fill(false),
-  reservedRecipeIndexes = []
+  reservedRecipeIds = []
 ) {
   const seasonalIndexes = conditions
     .map((attributes, index) => attributes.includes("seasonal") ? index : -1)
@@ -836,7 +875,7 @@ function generateWeek(
   const effectiveConditions = conditions.map((attributes, index) =>
     attributes.filter(attribute => attribute !== "seasonal")
       .concat(requiredSeasonalIndexes.has(index) ? ["seasonal"] : []));
-  return generateMenuWeek({
+  const generatedIndexes = generateMenuWeek({
     recipes: menus,
     preferBudget,
     vegetables,
@@ -844,7 +883,9 @@ function generateWeek(
     unavailableDays,
     consecutiveRecipeIds: consecutiveIds,
     requestedAssignments: requestedMenuAssignments,
-    reservedRecipeIndexes,
+    reservedRecipeIndexes: reservedRecipeIds
+      .map(id => indexForRecipeId(menus, id))
+      .filter(index => index >= 0),
     matchesSeason,
     recipeUsesExcludedIngredient,
     matchesAttributes,
@@ -853,63 +894,104 @@ function generateWeek(
     estimateRecipeCost,
     debug: true
   });
+  return generatedIndexes.map(index => index === null ? null : menus[index]?.id || null);
 }
 
 function generateSideWeek(vegetables = preferredVegetables, mainWeek = selected) {
   const week = [];
   while (week.length < 7) {
-    let candidates = sideDishes.map((recipe, index) => ({ recipe, index }))
-      .filter(item => matchesSeason(item.recipe) && !recipeUsesExcludedIngredient(item.recipe) && !week.includes(item.index));
-    if (!candidates.length) break;
-    candidates = preferMatchingCuisine(candidates, menus[mainWeek[week.length]]);
-    const bestScore = Math.max(...candidates.map(item => vegetableMatchCount(item.recipe, vegetables)));
-    if (bestScore > 0) candidates = candidates.filter(item => vegetableMatchCount(item.recipe, vegetables) === bestScore);
-    week.push(candidates[Math.floor(Math.random() * candidates.length)].index);
+    const picked = randomSideDish(week, vegetables, recipeById(menus, mainWeek[week.length]));
+    week.push(picked);
   }
   return week;
 }
 
 function randomSideDish(excludes = [], vegetables = preferredVegetables, mainRecipe = null) {
-  let candidates = sideDishes.map((recipe, index) => ({ recipe, index }))
-    .filter(item => matchesSeason(item.recipe) && !recipeUsesExcludedIngredient(item.recipe) && !excludes.includes(item.index));
-  if (!candidates.length) return null;
-  candidates = preferMatchingCuisine(candidates, mainRecipe);
-  const bestScore = Math.max(...candidates.map(item => vegetableMatchCount(item.recipe, vegetables)));
-  if (bestScore > 0) candidates = candidates.filter(item => vegetableMatchCount(item.recipe, vegetables) === bestScore);
-  return candidates[Math.floor(Math.random() * candidates.length)].index;
+  const pickedIndex = selectRecipeIndex({
+    recipes: sideDishes,
+    excludes: excludes.map(id => indexForRecipeId(sideDishes, id)).filter(index => index >= 0),
+    vegetables,
+    matchesSeason,
+    recipeUsesExcludedIngredient,
+    matchesAttributes,
+    recipeAttributes,
+    vegetableMatchCount,
+    estimateRecipeCost,
+    candidateRefiner: candidates => preferMatchingCuisine(candidates, mainRecipe)
+  });
+  return pickedIndex === null ? null : sideDishes[pickedIndex].id;
 }
 
 function generateSoupWeek(vegetables = preferredVegetables, mainWeek = selected) {
   const week = [];
   while (week.length < 7) {
-    let candidates = soups.map((recipe, index) => ({ recipe, index }))
-      .filter(item => {
-        const usedCount = week.filter(index => index === item.index).length;
-        return matchesSeason(item.recipe) && !recipeUsesExcludedIngredient(item.recipe)
-          && usedCount < 2 && week[week.length - 1] !== item.index;
-      });
-    if (!candidates.length) break;
-    candidates = preferMatchingCuisine(candidates, menus[mainWeek[week.length]]);
-    const bestScore = Math.max(...candidates.map(item => vegetableMatchCount(item.recipe, vegetables)));
-    if (bestScore > 0) candidates = candidates.filter(item => vegetableMatchCount(item.recipe, vegetables) === bestScore);
-    week.push(candidates[Math.floor(Math.random() * candidates.length)].index);
+    const currentDay = week.length;
+    const pickedIndex = selectRecipeIndex({
+      recipes: soups,
+      vegetables,
+      matchesSeason,
+      recipeUsesExcludedIngredient,
+      matchesAttributes,
+      recipeAttributes,
+      vegetableMatchCount,
+      estimateRecipeCost,
+      candidateFilter: recipe => week.filter(id => id === recipe.id).length < 2
+        && week[currentDay - 1] !== recipe.id,
+      candidateRefiner: candidates => preferMatchingCuisine(candidates, recipeById(menus, mainWeek[currentDay]))
+    });
+    week.push(pickedIndex === null ? null : soups[pickedIndex].id);
   }
   return week;
 }
 
-function randomSoup(index, vegetables = preferredVegetables) {
-  const otherDays = selectedSoups.filter((_, day) => day !== index);
-  let candidates = soups.map((recipe, soupIndex) => ({ recipe, soupIndex }))
-    .filter(item => {
-      const usedCount = otherDays.filter(used => used === item.soupIndex).length;
-      const adjacent = selectedSoups[index - 1] === item.soupIndex || selectedSoups[index + 1] === item.soupIndex;
-      return matchesSeason(item.recipe) && !recipeUsesExcludedIngredient(item.recipe) && usedCount < 2 && !adjacent;
+function randomSoup(index, vegetables = preferredVegetables, soupWeek = selectedSoups, mainWeek = selected) {
+  const otherDays = soupWeek.filter((_, day) => day !== index);
+  const pickedIndex = selectRecipeIndex({
+    recipes: soups,
+    vegetables,
+    matchesSeason,
+    recipeUsesExcludedIngredient,
+    matchesAttributes,
+    recipeAttributes,
+    vegetableMatchCount,
+    estimateRecipeCost,
+    candidateFilter: recipe => otherDays.filter(id => id === recipe.id).length < 2
+      && soupWeek[index - 1] !== recipe.id
+      && soupWeek[index + 1] !== recipe.id,
+    candidateRefiner: candidates => preferMatchingCuisine(candidates, recipeById(menus, mainWeek[index]))
   });
-  if (!candidates.length) return null;
-  candidates = preferMatchingCuisine(candidates, menus[selected[index]]);
-  const bestScore = Math.max(...candidates.map(item => vegetableMatchCount(item.recipe, vegetables)));
-  if (bestScore > 0) candidates = candidates.filter(item => vegetableMatchCount(item.recipe, vegetables) === bestScore);
-  return candidates[Math.floor(Math.random() * candidates.length)].soupIndex;
+  return pickedIndex === null ? null : soups[pickedIndex].id;
+}
+
+function applyRegeneratedWeek(regeneratedMenus, protectedDays, vegetables) {
+  const previousMenus = [...selected];
+  const previousSides = [...selectedSides];
+  const previousSoups = [...selectedSoups];
+  const previousAdditionalSides = additionalSideIds.map(ids => [...ids]);
+  const regeneratedSides = generateSideWeek(vegetables, regeneratedMenus);
+  const regeneratedSoups = generateSoupWeek(vegetables, regeneratedMenus);
+  selected = mergeProtectedMenuDays(previousMenus, regeneratedMenus, dayProtections, weeklyMenuLocked);
+  selectedSides = regeneratedSides.map((value, index) => protectedDays[index] ? previousSides[index] : value);
+  selectedSoups = regeneratedSoups.map((value, index) => protectedDays[index] ? previousSoups[index] : value);
+  additionalSideIds = previousAdditionalSides.map((ids, index) => protectedDays[index] ? ids : []);
+}
+
+function regenerateUnprotectedWeek({
+  preferBudget = budgetMode,
+  vegetables = preferredVegetables,
+  conditions = requestedConditions
+} = {}) {
+  const protectedDays = protectedDayFlags(selected, dayProtections, weeklyMenuLocked);
+  const reservedRecipeIds = selected.filter((recipeId, index) => protectedDays[index] && recipeId !== null);
+  const nextMenus = generateWeek(
+    preferBudget,
+    vegetables,
+    conditions,
+    protectedDays,
+    reservedRecipeIds
+  );
+  applyRegeneratedWeek(nextMenus, protectedDays, vegetables);
+  return protectedDays;
 }
 
 function compatibleSimpleMenus() {
@@ -923,26 +1005,21 @@ function compatibleFavoriteMenus() {
 }
 
 function randomSimpleMenu(excludes = [], hardExcludes = [], attributes = []) {
-  const blocked = new Set(excludes);
-  hardExcludes.forEach(index => blocked.add(index));
-  const candidates = compatibleSimpleMenus()
-    .filter(item => !blocked.has(item.index) && matchesAttributes(item.recipe, attributes));
-  return candidates.length ? candidates[Math.floor(Math.random() * candidates.length)].index : null;
+  return randomMenu(excludes, false, hardExcludes, preferredVegetables, attributes, [...simpleIds]);
 }
 
 function randomFavoriteMenu(excludes = [], hardExcludes = [], attributes = []) {
-  const blocked = new Set(excludes);
-  hardExcludes.forEach(index => blocked.add(index));
-  const candidates = compatibleFavoriteMenus()
-    .filter(item => !blocked.has(item.index) && matchesAttributes(item.recipe, attributes));
-  return candidates.length ? candidates[Math.floor(Math.random() * candidates.length)].index : null;
+  return randomMenu(excludes, false, hardExcludes, preferredVegetables, attributes, [...favoriteIds]);
 }
 
 function applyDayReplacement(index, replacement) {
-  selected[index] = replacement;
-  if (!consecutiveIds.has(menus[replacement].id)) return;
-  const pairIndex = index < selected.length - 1 ? index + 1 : index - 1;
-  selected[pairIndex] = replacement;
+  const result = replaceMenuDay(selected, index, replacement, {
+    dayProtections,
+    weeklyLocked: weeklyMenuLocked,
+    consecutiveRecipeIds: consecutiveIds
+  });
+  selected = result.selection;
+  return result.changed;
 }
 
 function notify(message) {
@@ -959,10 +1036,21 @@ list.addEventListener("click", (event) => {
     selectedSides = generateSideWeek(preferredVegetables, selected);
     selectedSoups = generateSoupWeek(preferredVegetables, selected);
     additionalSideIds = Array.from({ length: 7 }, () => []);
-    manuallySelectedDays = Array(7).fill(false);
+    dayProtections = createDayProtections();
     saveWeeklyMenu();
     renderKeepingScrollPosition();
     notify("一週間の献立を戻しました");
+    return;
+  }
+  const dayLockButton = event.target.closest("[data-toggle-day-lock]");
+  if (dayLockButton) {
+    const index = Number(dayLockButton.dataset.toggleDayLock);
+    if (weeklyMenuLocked) return;
+    const willLock = !dayProtections[index]?.manual;
+    dayProtections = setManualProtection(dayProtections, index, willLock);
+    saveWeeklyMenu();
+    render();
+    notify(`${days[index]}曜日の固定を${willLock ? "設定" : "解除"}しました`);
     return;
   }
   const removeSideButton = event.target.closest("[data-remove-side]");
@@ -1011,6 +1099,10 @@ list.addEventListener("click", (event) => {
   const eatingOutButton = event.target.closest(".eating-out-button");
   if (eatingOutButton) {
     const index = Number(eatingOutButton.dataset.eatingOutIndex);
+    if (isProtectedDay(index)) {
+      notify("固定・希望を解除してから変更してください");
+      return;
+    }
     selected[index] = null;
     selectedSides[index] = null;
     selectedSoups[index] = null;
@@ -1024,24 +1116,28 @@ list.addEventListener("click", (event) => {
   const soupButton = event.target.closest(".soup-open");
   if (soupButton) {
     recipeReturnContext = null;
-    showRecipe(soups[Number(soupButton.dataset.soupRecipe)]);
+    showRecipe(recipeById(soups, soupButton.dataset.soupRecipe));
     return;
   }
   const sideRecipeButton = event.target.closest(".side-dish-open");
   if (sideRecipeButton) {
     recipeReturnContext = null;
-    showRecipe(sideDishes[Number(sideRecipeButton.dataset.sideRecipe)]);
+    showRecipe(recipeById(sideDishes, sideRecipeButton.dataset.sideRecipe));
     return;
   }
   const recipeButton = event.target.closest(".recipe-open");
   if (recipeButton) {
     recipeReturnContext = null;
-    showRecipe(menus[Number(recipeButton.dataset.recipe)]);
+    showRecipe(recipeById(menus, recipeButton.dataset.recipe));
     return;
   }
   const simpleButton = event.target.closest(".simple-retry");
   if (simpleButton) {
     const index = Number(simpleButton.dataset.simpleIndex);
+    if (isProtectedDay(index)) {
+      notify("固定・希望・お休みの日は変更できません");
+      return;
+    }
     const replacement = randomSimpleMenu(
       [selected[index - 1], selected[index + 1]].filter(value => value !== undefined),
       selected,
@@ -1052,7 +1148,7 @@ list.addEventListener("click", (event) => {
       return;
     }
     applyDayReplacement(index, replacement);
-    if (selectedSides[index] === null) selectedSides[index] = randomSideDish(selectedSides.filter(value => value !== null), preferredVegetables, menus[replacement]);
+    if (selectedSides[index] === null) selectedSides[index] = randomSideDish(selectedSides.filter(value => value !== null), preferredVegetables, recipeById(menus, replacement));
     if (selectedSoups[index] === null) selectedSoups[index] = randomSoup(index);
     saveWeeklyMenu();
     render();
@@ -1062,6 +1158,10 @@ list.addEventListener("click", (event) => {
   const favoriteButton = event.target.closest(".favorite-retry");
   if (favoriteButton) {
     const index = Number(favoriteButton.dataset.favoriteIndex);
+    if (isProtectedDay(index)) {
+      notify("固定・希望・お休みの日は変更できません");
+      return;
+    }
     const replacement = randomFavoriteMenu(
       [selected[index - 1], selected[index + 1]].filter(value => value !== undefined),
       selected,
@@ -1072,7 +1172,7 @@ list.addEventListener("click", (event) => {
       return;
     }
     applyDayReplacement(index, replacement);
-    if (selectedSides[index] === null) selectedSides[index] = randomSideDish(selectedSides.filter(value => value !== null), preferredVegetables, menus[replacement]);
+    if (selectedSides[index] === null) selectedSides[index] = randomSideDish(selectedSides.filter(value => value !== null), preferredVegetables, recipeById(menus, replacement));
     if (selectedSoups[index] === null) selectedSoups[index] = randomSoup(index);
     saveWeeklyMenu();
     render();
@@ -1082,11 +1182,19 @@ list.addEventListener("click", (event) => {
   const button = event.target.closest(".retry");
   if (!button) return;
   dayChangeIndex = Number(button.dataset.index);
+  if (isProtectedDay(dayChangeIndex)) {
+    notify("固定・希望・お休みを解除してから変更してください");
+    return;
+  }
   document.querySelector("#day-change-title").textContent = `${days[dayChangeIndex]}曜日の献立を変える`;
   dayChangeDialog.showModal();
 });
 
 function shuffleOneDay(index) {
+  if (isProtectedDay(index)) {
+    notify("固定・希望・お休みを解除してから変更してください");
+    return false;
+  }
   const replacement = randomMenu(
     [selected[index - 1], selected[index + 1]].filter(value => value !== undefined),
     budgetMode,
@@ -1099,8 +1207,7 @@ function shuffleOneDay(index) {
     return false;
   }
   selected[index] = replacement;
-  manuallySelectedDays[index] = false;
-  const sideReplacement = randomSideDish(selectedSides.filter((_, day) => day !== index), preferredVegetables, menus[replacement]);
+  const sideReplacement = randomSideDish(selectedSides.filter((_, day) => day !== index), preferredVegetables, recipeById(menus, replacement));
   if (sideReplacement !== null) selectedSides[index] = sideReplacement;
   const soupReplacement = randomSoup(index);
   if (soupReplacement !== null) selectedSoups[index] = soupReplacement;
@@ -1549,24 +1656,27 @@ document.querySelector("#recipe-edit-form").addEventListener("submit", async eve
 
 document.querySelector("#cancel-recipe-edit").addEventListener("click", () => recipeEditDialog.close());
 
-function adjustedSelection(selection, deletedIndex) {
-  return selection.map(index => index === null || index === undefined
-    ? index
-    : index === deletedIndex ? null : index > deletedIndex ? index - 1 : index);
+function adjustedSelection(selection, deletedId) {
+  return selection.map(id => id === deletedId ? null : id);
 }
 
-function adjustSavedWeeksForDeletion(type, deletedIndex) {
-  const field = type === "side" ? "selectedSides" : type === "soup" ? "selectedSoups" : "selected";
+function adjustSavedWeeksForDeletion(type, deletedId) {
+  const field = type === "side" ? "sideRecipeIds" : type === "soup" ? "soupRecipeIds" : "mainRecipeIds";
   const adjustSaved = saved => {
     if (!saved || !Array.isArray(saved[field])) return saved;
     const affectedDays = type === "main"
-      ? saved.selected.map((index, day) => index === deletedIndex ? day : -1).filter(day => day >= 0)
+      ? saved.mainRecipeIds.map((id, day) => id === deletedId ? day : -1).filter(day => day >= 0)
       : [];
-    saved[field] = adjustedSelection(saved[field], deletedIndex);
+    saved[field] = adjustedSelection(saved[field], deletedId);
     affectedDays.forEach(day => {
-      if (Array.isArray(saved.selectedSides)) saved.selectedSides[day] = null;
-      if (Array.isArray(saved.selectedSoups)) saved.selectedSoups[day] = null;
+      if (Array.isArray(saved.sideRecipeIds)) saved.sideRecipeIds[day] = null;
+      if (Array.isArray(saved.soupRecipeIds)) saved.soupRecipeIds[day] = null;
     });
+    if (type === "side" && Array.isArray(saved.additionalSideIds)) {
+      saved.additionalSideIds = saved.additionalSideIds.map(ids => Array.isArray(ids)
+        ? ids.filter(id => id !== deletedId)
+        : []);
+    }
     return saved;
   };
   try {
@@ -1574,10 +1684,6 @@ function adjustSavedWeeksForDeletion(type, deletedIndex) {
     Object.values(weeks).forEach(adjustSaved);
     localStorage.setItem(weeklyMenusStorageKey, JSON.stringify(weeks));
   } catch { /* 壊れた保存データはそのままにする */ }
-  try {
-    const legacy = JSON.parse(localStorage.getItem(weeklyMenuStorageKey) || "null");
-    if (legacy) localStorage.setItem(weeklyMenuStorageKey, JSON.stringify(adjustSaved(legacy)));
-  } catch { /* 旧形式の保存データは読み飛ばす */ }
 }
 
 async function deleteRecipe(recipe) {
@@ -1594,18 +1700,19 @@ async function deleteRecipe(recipe) {
     }
   }
 
-  adjustSavedWeeksForDeletion(type, deletedIndex);
+  adjustSavedWeeksForDeletion(type, recipe.id);
   if (type === "main") {
-    const affectedDays = selected.map((index, day) => index === deletedIndex ? day : -1).filter(day => day >= 0);
-    selected = adjustedSelection(selected, deletedIndex);
+    const affectedDays = selected.map((id, day) => id === recipe.id ? day : -1).filter(day => day >= 0);
+    selected = adjustedSelection(selected, recipe.id);
     affectedDays.forEach(day => {
       selectedSides[day] = null;
       selectedSoups[day] = null;
     });
   } else if (type === "side") {
-    selectedSides = adjustedSelection(selectedSides, deletedIndex);
+    selectedSides = adjustedSelection(selectedSides, recipe.id);
+    additionalSideIds = additionalSideIds.map(ids => ids.filter(id => id !== recipe.id));
   } else {
-    selectedSoups = adjustedSelection(selectedSoups, deletedIndex);
+    selectedSoups = adjustedSelection(selectedSoups, recipe.id);
   }
   collection.splice(deletedIndex, 1);
   delete menuEdits[recipe.id];
@@ -1732,8 +1839,8 @@ function renderSideDishSearchResults() {
   const currentId = dayIndex === null
     ? null
     : isSoup
-      ? selectedSoups[dayIndex] === null ? null : soups[selectedSoups[dayIndex]]?.id
-      : selectedSides[dayIndex] === null ? null : sideDishes[selectedSides[dayIndex]]?.id;
+      ? selectedSoups[dayIndex]
+      : selectedSides[dayIndex];
   const alreadyAdded = new Set(dayIndex === null || dishPickerMode !== "add-side" ? [] : additionalSideIds[dayIndex]);
   const matches = recipes.filter(recipe => {
     if (recipe.id === currentId || alreadyAdded.has(recipe.id)) return false;
@@ -1783,12 +1890,22 @@ function renderMainDishSearchResults() {
 document.querySelector("#shuffle-one-day").addEventListener("click", () => {
   if (dayChangeIndex === null || weeklyMenuLocked) return;
   const index = dayChangeIndex;
+  if (isProtectedDay(index)) {
+    dayChangeDialog.close();
+    notify("固定・希望・お休みを解除してから変更してください");
+    return;
+  }
   dayChangeDialog.close();
   shuffleOneDay(index);
 });
 
 document.querySelector("#choose-existing-menu").addEventListener("click", () => {
   if (dayChangeIndex === null || weeklyMenuLocked) return;
+  if (isProtectedDay(dayChangeIndex)) {
+    dayChangeDialog.close();
+    notify("固定・希望・お休みを解除してから変更してください");
+    return;
+  }
   document.querySelector("#main-dish-picker-title").textContent = `${days[dayChangeIndex]}曜日の主菜を選ぶ`;
   const input = document.querySelector("#main-dish-search-input");
   input.value = "";
@@ -1802,19 +1919,25 @@ document.querySelector("#main-dish-search-input").addEventListener("input", rend
 document.querySelector("#main-dish-search-results").addEventListener("click", event => {
   const button = event.target.closest("[data-select-main-dish]");
   if (!button || dayChangeIndex === null || weeklyMenuLocked) return;
-  const replacement = menus.findIndex(recipe => recipe.id === button.dataset.selectMainDish);
-  if (replacement < 0) return;
+  if (isProtectedDay(dayChangeIndex)) {
+    mainDishPickerDialog.close();
+    notify("固定・希望・お休みを解除してから変更してください");
+    return;
+  }
+  const replacement = button.dataset.selectMainDish;
+  const replacementRecipe = recipeById(menus, replacement);
+  if (!replacementRecipe) return;
   const index = dayChangeIndex;
   selected[index] = replacement;
-  manuallySelectedDays[index] = true;
-  const sideReplacement = randomSideDish(selectedSides.filter((_, day) => day !== index), preferredVegetables, menus[replacement]);
+  dayProtections = setManualProtection(dayProtections, index, true);
+  const sideReplacement = randomSideDish(selectedSides.filter((_, day) => day !== index), preferredVegetables, replacementRecipe);
   if (sideReplacement !== null) selectedSides[index] = sideReplacement;
   const soupReplacement = randomSoup(index);
   if (soupReplacement !== null) selectedSoups[index] = soupReplacement;
   saveWeeklyMenu();
   mainDishPickerDialog.close();
   render();
-  notify(`${days[index]}曜日を「${menus[replacement].main}」に変更し、固定しました`);
+  notify(`${days[index]}曜日を「${replacementRecipe.main}」に変更し、固定しました`);
 });
 
 document.querySelector("#side-dish-search-input").addEventListener("input", renderSideDishSearchResults);
@@ -1826,9 +1949,9 @@ document.querySelector("#side-dish-search-results").addEventListener("click", ev
   if (!recipe) return;
   const dayIndex = sideDishPickerDayIndex;
   if (dishPickerMode === "replace-soup") {
-    selectedSoups[dayIndex] = soups.indexOf(recipe);
+    selectedSoups[dayIndex] = recipe.id;
   } else if (dishPickerMode === "replace-side") {
-    selectedSides[dayIndex] = sideDishes.indexOf(recipe);
+    selectedSides[dayIndex] = recipe.id;
   } else {
     additionalSideIds[dayIndex].push(recipe.id);
   }
@@ -1841,10 +1964,10 @@ document.querySelector("#side-dish-search-results").addEventListener("click", ev
 
 function buildShoppingList() {
   const weeklyRecipes = [
-    ...selected.map(index => menus[index]),
-    ...selectedSides.map(index => sideDishes[index]),
+    ...selected.map(id => recipeById(menus, id)),
+    ...selectedSides.map(id => recipeById(sideDishes, id)),
     ...additionalSideIds.flat().map(id => sideDishes.find(recipe => recipe.id === id)),
-    ...selectedSoups.map(index => soups[index])
+    ...selectedSoups.map(id => recipeById(soups, id))
   ];
   const groups = calculateShoppingGroups(weeklyRecipes, servings);
   document.querySelector("#servings-buttons").innerHTML = [1, 2, 3, 4, 5].map(number =>
@@ -1945,11 +2068,7 @@ document.addEventListener("click", async event => {
   if (seasonButton) {
     activeSeason = activeSeason === seasonButton.dataset.season ? "none" : seasonButton.dataset.season;
     localStorage.setItem("menuSeason", activeSeason);
-    selected = ingredientExclusionMode ? generateWeek() : initialSeasonSelection();
-    selectedSides = generateSideWeek([], selected);
-    selectedSoups = generateSoupWeek([], selected);
-    additionalSideIds = Array.from({ length: 7 }, () => []);
-    manuallySelectedDays = Array(7).fill(false);
+    regenerateUnprotectedWeek({ vegetables: [] });
     saveWeeklyMenu();
     updateSeasonUI();
     render();
@@ -2071,23 +2190,29 @@ document.querySelector("#load-weekly-request").addEventListener("click", () => {
     }
     const assignments = requestedMenuAssignments.map(assignment => ({ ...assignment }));
     if (!assignments.length) {
-      notify(document.querySelector("#request").value.trim()
-        ? "曜日と登録済みの料理名を確認してください"
-        : "今週の希望に読み込める献立がありません");
+      dayProtections = reconcileRequestedProtections(dayProtections, []);
+      saveWeeklyMenu();
+      render();
+      notify("希望による固定を解除しました。現在の献立はそのまま残しています");
       return;
     }
 
     assignments.forEach(({ dayIndex, date, recipeId }) => {
-      const replacementIndex = menus.findIndex(recipe => recipe.id === recipeId);
+      const replacementRecipe = recipeById(menus, recipeId);
       console.log("[requested-menu-loader] target date =", date, { dayIndex });
       console.log("[requested-menu-loader] recipeId =", recipeId);
-      console.log("[requested-menu-loader] current recipe =", menus[selected[dayIndex]] || null);
-      console.log("[requested-menu-loader] replacement recipe =", menus[replacementIndex] || null);
+      console.log("[requested-menu-loader] current recipe =", recipeById(menus, selected[dayIndex]));
+      console.log("[requested-menu-loader] replacement recipe =", replacementRecipe);
     });
 
+    const requestedTargetDays = assignments.map(assignment => assignment.dayIndex);
     const loadResult = loadRequestedMenuSelection(selected, assignments, weekDates, {
       recipes: menus,
-      consecutiveRecipeIds: consecutiveIds
+      consecutiveRecipeIds: consecutiveIds,
+      useRecipeIds: true,
+      protectedDays: requestedLoadProtectionFlags(
+        selected, dayProtections, requestedTargetDays, weeklyMenuLocked
+      )
     });
     const failedAssignment = loadResult.failedAssignment;
     if (failedAssignment) {
@@ -2095,19 +2220,34 @@ document.querySelector("#load-weekly-request").addEventListener("click", () => {
       return;
     }
     selected = loadResult.selection;
-    console.log("[requested-menu-loader] selected after update =", selected.map((menuIndex, dayIndex) => ({
+    dayProtections = reconcileRequestedProtections(dayProtections, loadResult.appliedDayIndexes);
+    const regenerated = regenerateRequestedAccompaniments(
+      selectedSides,
+      selectedSoups,
+      loadResult.appliedDayIndexes,
+      {
+        generateSide: (dayIndex, sideWeek) => randomSideDish(
+          sideWeek.filter((id, otherDay) => otherDay !== dayIndex && id !== null),
+          preferredVegetables,
+          recipeById(menus, selected[dayIndex])
+        ),
+        generateSoup: (dayIndex, _sideWeek, soupWeek) => randomSoup(
+          dayIndex, preferredVegetables, soupWeek, selected
+        )
+      }
+    );
+    selectedSides = regenerated.sideSelection;
+    selectedSoups = regenerated.soupSelection;
+    console.log("[requested-menu-loader] selected after update =", selected.map((recipeId, dayIndex) => ({
       date: dateStorageKey(weekDates[dayIndex]),
-      menuIndex,
-      recipeId: menus[menuIndex]?.id || null,
-      recipeName: menus[menuIndex]?.main || null
+      recipeId,
+      recipeName: recipeById(menus, recipeId)?.main || null
     })));
     render();
     console.log("[requested-menu-loader] render result =", assignments.map(({ dayIndex, date, recipeId }) => ({
       date,
       expectedRecipeId: recipeId,
-      renderedRecipeId: list.querySelector(`[data-day-index="${dayIndex}"] .recipe-open`)?.dataset.recipe
-        ? menus[Number(list.querySelector(`[data-day-index="${dayIndex}"] .recipe-open`).dataset.recipe)]?.id
-        : null,
+      renderedRecipeId: list.querySelector(`[data-day-index="${dayIndex}"] .recipe-open`)?.dataset.recipe || null,
       renderedRecipeName: list.querySelector(`[data-day-index="${dayIndex}"] .recipe-open h3`)?.textContent || null
     })));
     console.log("[requested-menu-loader] save start");
@@ -2119,11 +2259,7 @@ document.querySelector("#load-weekly-request").addEventListener("click", () => {
       notify("献立は画面に反映しましたが、端末への保存に失敗しました");
       return;
     }
-    const expandedDays = new Set(assignments.map(({ dayIndex }) => dayIndex));
-    assignments.forEach(({ dayIndex, recipeId }) => {
-      if (consecutiveIds.has(recipeId) && dayIndex < 6) expandedDays.add(dayIndex + 1);
-    });
-    notify(`今週の希望を${expandedDays.size}日分反映しました`);
+    notify(`今週の希望を${loadResult.appliedDayIndexes.length}日分反映し、希望として保護しました`);
   } catch (error) {
     console.error("[requested-menu-loader] failed", error);
     notify("今週の希望を読み込めませんでした。もう一度お試しください");
@@ -2140,32 +2276,17 @@ document.querySelector("#shuffle-partial").addEventListener("click", async () =>
     notify("この週は固定中です。固定を解除してから再提案してください");
     return;
   }
-  const eatingOutDays = selected.map(menuIndex => menuIndex === null);
-  const protectedDays = eatingOutDays.map((isEatingOut, index) => isEatingOut || manuallySelectedDays[index]);
-  const reservedRecipeIndexes = selected.filter((menuIndex, index) => manuallySelectedDays[index] && menuIndex !== null);
-  const previousMenus = [...selected];
-  const previousSides = [...selectedSides];
-  const previousSoups = [...selectedSoups];
-  const regeneratedMenus = generateWeek(budgetMode, preferredVegetables, requestedConditions, protectedDays, reservedRecipeIndexes);
-  const regeneratedSides = generateSideWeek(preferredVegetables, regeneratedMenus);
-  const regeneratedSoups = generateSoupWeek(preferredVegetables, regeneratedMenus);
-  selected = regeneratedMenus.map((menuIndex, index) => protectedDays[index] ? previousMenus[index] : menuIndex);
-  selectedSides = regeneratedSides.map((sideIndex, index) => protectedDays[index] ? previousSides[index] : sideIndex);
-  selectedSoups = regeneratedSoups.map((soupIndex, index) => protectedDays[index] ? previousSoups[index] : soupIndex);
+  const protectedDays = regenerateUnprotectedWeek();
   saveWeeklyMenu();
   render();
   const protectedCount = protectedDays.filter(Boolean).length;
   notify(protectedCount
-    ? `固定中・お休みの${protectedCount}日を残して再提案しました`
+    ? `固定・希望・お休みの${protectedCount}日を残して再提案しました`
     : "一週間の献立を再提案しました");
 });
 
 document.querySelector("#shuffle-all").addEventListener("click", () => {
-  selected = generateWeek();
-  selectedSides = generateSideWeek();
-  selectedSoups = generateSoupWeek();
-  additionalSideIds = Array.from({ length: 7 }, () => []);
-  manuallySelectedDays = Array(7).fill(false);
+  const protectedDays = regenerateUnprotectedWeek();
   saveWeeklyMenu();
   shoppingExtras.fruit = "";
   shoppingExtras.sweets = "";
@@ -2180,15 +2301,22 @@ document.querySelector("#shuffle-all").addEventListener("click", () => {
   document.querySelector("#shopping-alcohol").value = "";
   document.querySelector("#shopping-memo").value = "";
   render();
-  notify("一週間の献立を再提案しました");
+  const protectedCount = protectedDays.filter(Boolean).length;
+  notify(protectedCount
+    ? `固定・希望・お休みの${protectedCount}日を残して再提案しました`
+    : "一週間の献立を再提案しました");
 });
 
 document.querySelector("#take-week-off").addEventListener("click", () => {
+  if (weeklyMenuLocked || dayProtections.some(protection => protection.manual || protection.requested)) {
+    notify("固定・希望を解除してから週間お休みにしてください");
+    return;
+  }
   selected = Array(7).fill(null);
   selectedSides = Array(7).fill(null);
   selectedSoups = Array(7).fill(null);
   additionalSideIds = Array.from({ length: 7 }, () => []);
-  manuallySelectedDays = Array(7).fill(false);
+  dayProtections = createDayProtections();
   saveWeeklyMenu();
   renderKeepingScrollPosition();
   notify("今週はお休みにしました。ゆっくりしてくださいね");
@@ -2208,11 +2336,7 @@ document.querySelector("#generate").addEventListener("click", () => {
       ...parsePreferredVegetables(request)
     ])];
   }
-  selected = generateWeek(budgetMode, preferredVegetables);
-  selectedSides = generateSideWeek(preferredVegetables);
-  selectedSoups = generateSoupWeek(preferredVegetables);
-  additionalSideIds = Array.from({ length: 7 }, () => []);
-  manuallySelectedDays = Array(7).fill(false);
+  regenerateUnprotectedWeek({ preferBudget: budgetMode, vegetables: preferredVegetables });
   saveWeeklyMenu();
   render();
   const vegetableMessage = ingredientExclusionMode && excludedIngredients.length
@@ -2420,6 +2544,11 @@ initializeRecipePhoto({
 
 initializeFamilySharing({
   getLocalRecipes: () => [...menus, ...sideDishes, ...soups],
+  getPendingLocalRecipes: () => {
+    const pendingIds = new Set(Object.keys(menuEdits));
+    return [...menus, ...sideDishes, ...soups].filter(recipe => pendingIds.has(recipe.id));
+  },
+  getDeletedRecipeIds: () => [...deletedRecipeIds],
   applySharedRecipes,
   onReady: async () => {
     await syncVisibleWeeklyMenu();

@@ -8,6 +8,14 @@ const validAdditionalSides = value => Array.isArray(value) && value.length === 7
   && value.every(ids => Array.isArray(ids) && ids.every(id => typeof id === "string" && id.length > 0 && id.length <= 120));
 const validFixedDays = value => Array.isArray(value) && value.length === 7
   && value.every(item => typeof item === "boolean");
+const validDayProtections = value => Array.isArray(value) && value.length === 7
+  && value.every(item => item && typeof item === "object" && !Array.isArray(item)
+    && typeof item.manual === "boolean" && typeof item.requested === "boolean");
+
+function normalizeDayProtections(value, manuallySelectedDays) {
+  if (value === undefined) return manuallySelectedDays.map(manual => ({ manual, requested: false }));
+  return value.map(item => ({ manual: item.manual, requested: item.requested }));
+}
 
 export function normalizeWeeklyMenu(value, weekStart) {
   if (!WEEK_START_PATTERN.test(weekStart)
@@ -16,11 +24,13 @@ export function normalizeWeeklyMenu(value, weekStart) {
     || !validRecipeIds(value?.soupRecipeIds)
     || !validAdditionalSides(value?.additionalSideIds)
     || !validFixedDays(value?.manuallySelectedDays)
+    || (value?.dayProtections !== undefined && !validDayProtections(value.dayProtections))
     || typeof value?.locked !== "boolean"
     || (value?.unlock !== undefined && typeof value.unlock !== "boolean")) return null;
+  const dayProtections = normalizeDayProtections(value.dayProtections, value.manuallySelectedDays);
   return { weekStart, mainRecipeIds: value.mainRecipeIds, sideRecipeIds: value.sideRecipeIds,
     soupRecipeIds: value.soupRecipeIds, additionalSideIds: value.additionalSideIds,
-    manuallySelectedDays: value.manuallySelectedDays, locked: value.locked,
+    dayProtections, manuallySelectedDays: dayProtections.map(item => item.manual), locked: value.locked,
     unlock: value.unlock === true };
 }
 

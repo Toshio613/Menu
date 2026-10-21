@@ -1,5 +1,6 @@
 import { apiRequest, getAuthToken, getClientId, setAuthToken } from "./api-client.js";
 import { recipeRepository } from "./recipe-repository.js";
+import { synchronizeFamilyRecipes } from "./family-recipe-sync.js";
 
 function elements() {
   return {
@@ -25,24 +26,33 @@ function displayError(error) {
     D1_NOT_CONFIGURED: "WorkerにD1のDB Bindingを設定してください。",
     RATE_LIMITED: "試行回数が多すぎます。少し待ってください。",
     TIMEOUT: "通信がタイムアウトしました。",
-    NETWORK_ERROR: "共有サーバーへ接続できませんでした。"
+    NETWORK_ERROR: "共有サーバーへ接続できませんでした。",
+    LOCAL_RECIPE_MIGRATION_CONFLICT: "端末と共有サーバーの料理データが異なるため、端末データを残しました。"
   };
   return messages[error.code] || error.message || "家族共有の処理に失敗しました。";
 }
 
-export function initializeFamilySharing({ getLocalRecipes, applySharedRecipes, onReady }) {
+export function initializeFamilySharing({
+  getLocalRecipes,
+  getPendingLocalRecipes = () => [],
+  getDeletedRecipeIds = () => [],
+  applySharedRecipes,
+  onReady
+}) {
   const { button, dialog, form, password } = elements();
 
   async function synchronize() {
     button.disabled = true;
     button.textContent = "同期中…";
     try {
-      await recipeRepository.importOnce(getLocalRecipes());
-      const recipes = await recipeRepository.list();
-      applySharedRecipes(recipes);
-      localStorage.removeItem("menuRecipeEdits");
-      localStorage.removeItem("deletedRecipeIds");
-      localStorage.setItem("d1RecipeMigrationComplete", "true");
+      await synchronizeFamilyRecipes({
+        repository: recipeRepository,
+        localRecipes: getLocalRecipes(),
+        pendingRecipes: getPendingLocalRecipes(),
+        deletedRecipeIds: getDeletedRecipeIds(),
+        storage: localStorage,
+        applySharedRecipes
+      });
       button.textContent = "家族共有中";
       button.dataset.connected = "true";
       await onReady?.();

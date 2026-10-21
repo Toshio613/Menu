@@ -60,13 +60,14 @@ export class RecipeRepository {
     return result.meta.changes > 0;
   }
 
-  async importOnce(recipes) {
-    const imported = await this.db.prepare("SELECT value FROM app_meta WHERE key = 'recipes_imported'").first();
-    if (imported) return { imported: false, count: 0 };
+  async importMissing(recipes) {
+    if (!recipes.length) return { imported: false, count: 0 };
     const now = new Date().toISOString();
     const statements = recipes.map(recipe => insertStatement(this.db, recipe, now, "ON CONFLICT(id) DO NOTHING"));
     statements.push(this.db.prepare("INSERT INTO app_meta (key, value, updated_at) VALUES ('recipes_imported', ?, ?) ON CONFLICT(key) DO NOTHING").bind(now, now));
-    await this.db.batch(statements);
-    return { imported: true, count: recipes.length };
+    const results = await this.db.batch(statements);
+    const count = results.slice(0, recipes.length)
+      .reduce((total, result) => total + (Number(result?.meta?.changes) || 0), 0);
+    return { imported: count > 0, count };
   }
 }
