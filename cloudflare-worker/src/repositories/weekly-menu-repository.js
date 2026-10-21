@@ -2,20 +2,19 @@ function parseJson(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
-function normalizeDayProtections(value, manuallySelectedDays) {
+function normalizeDayProtections(value) {
   if (Array.isArray(value) && value.length === 7) {
-    return value.map(item => ({ manual: item?.manual === true, requested: item?.requested === true }));
+    return value.map(item => {
+      const manual = item?.manual === true && item?.manualSource === "button";
+      return { manual, requested: item?.requested === true, ...(manual ? { manualSource: "button" } : {}) };
+    });
   }
-  return Array.from({ length: 7 }, (_, index) => ({
-    manual: manuallySelectedDays[index] === true,
-    requested: false
-  }));
+  return Array.from({ length: 7 }, () => ({ manual: false, requested: false }));
 }
 
 function fromRow(row) {
   if (!row) return null;
-  const manuallySelectedDays = parseJson(row.manually_selected_days, Array(7).fill(false));
-  const dayProtections = normalizeDayProtections(parseJson(row.day_protections, null), manuallySelectedDays);
+  const dayProtections = normalizeDayProtections(parseJson(row.day_protections, null));
   return {
     weekStart: row.week_start,
     mainRecipeIds: parseJson(row.main_recipe_ids, []),

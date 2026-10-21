@@ -17,7 +17,9 @@ import { WeeklyMenuRepository } from "../src/repositories/weekly-menu-repository
 
 const none = () => createDayProtections();
 const protectedAt = (index, reason) => none().map((entry, dayIndex) =>
-  dayIndex === index ? { ...entry, [reason]: true } : entry);
+  dayIndex === index
+    ? { ...entry, [reason]: true, ...(reason === "manual" ? { manualSource: "button" } : {}) }
+    : entry);
 
 const collections = {
   menus: ["a", "b", "c", "d", "e", "f", "g", "curry", "hamburg"].map(id => ({ id })),
@@ -133,8 +135,10 @@ test("13 requested指定削除は料理を残しrequested保護だけ解除す�
 });
 
 test("14 manualとrequestedの複合状態からrequestedだけ解除できる", () => {
-  const protections = reconcileRequestedProtections([{ manual: true, requested: true }, ...none().slice(1)], []);
-  assert.deepEqual(protections[0], { manual: true, requested: false });
+  const manual = setManualProtection(none(), 0, true);
+  const combined = reconcileRequestedProtections(manual, [0]);
+  const protections = reconcileRequestedProtections(combined, []);
+  assert.deepEqual(protections[0], { manual: true, requested: false, manualSource: "button" });
 });
 
 test("15 週全体ロックONは理由のない日も保護する", () => {
@@ -168,16 +172,15 @@ test("20 requested指定日をお気に入り・かんたん・通常再提案�
   assert.equal(mergeProtectedMenuDays(record().mainRecipeIds, Array(7).fill("new"), options.dayProtections)[3], "d");
 });
 
-test("21 旧version 2データはmanuallySelectedDaysをmanual理由として安全に読み込む", () => {
+test("21 旧version 2のmanuallySelectedDaysは明示的固定と判定せずfalseへ正規化する", () => {
   const old = record({ manuallySelectedDays: [false, false, false, true, false, false, false] });
   const normalized = normalizeWeeklyMenuRecord(old, collections, old.weekStart);
-  assert.equal(normalized.dayProtections[3].manual, true);
+  assert.equal(normalized.dayProtections[3].manual, false);
   assert.equal(normalized.dayProtections[3].requested, false);
 });
 
 test("22 D1保存・再取得後もmanual/requested状態を維持する", async () => {
-  const dayProtections = none();
-  dayProtections[2] = { manual: true, requested: false };
+  const dayProtections = setManualProtection(none(), 2, true);
   dayProtections[3] = { manual: false, requested: true };
   const normalized = normalizeWeeklyMenu(record({ dayProtections }), "2026-10-18");
   let savedRow = null;
@@ -210,7 +213,7 @@ test("22 D1保存・再取得後もmanual/requested状態を維持する", async
   assert.deepEqual(manualProtectionDays(normalizeDayProtections(restored.dayProtections)), [false, false, true, false, false, false, false]);
 });
 
-test("旧D1行にday_protectionsがなくてもmanualの互換状態とrequested=falseを復元する", async () => {
+test("旧D1行にday_protectionsがない場合はmanual/requestedをfalseで復元する", async () => {
   const oldRow = {
     week_start: "2026-10-18",
     main_recipe_ids: JSON.stringify(record().mainRecipeIds),
@@ -223,5 +226,40 @@ test("旧D1行にday_protectionsがなくてもmanualの互換状態とrequested
   };
   const db = { prepare: () => ({ bind: () => ({ first: async () => oldRow }) }) };
   const restored = await new WeeklyMenuRepository(db).get("2026-10-18");
-  assert.deepEqual(restored.dayProtections[2], { manual: true, requested: false });
+  assert.deepEqual(restored.dayProtections[2], { manual: false, requested: false });
+});
+
+test("登録料理の選択等で作られた出所不明のmanual=trueは再入場時に固定として復元しない", () => {
+  const saved = record({
+    dayProtections: none().map((entry, index) => index === 4 ? { ...entry, manual: true } : entry),
+    manuallySelectedDays: [false, false, false, false, true, false, false]
+  });
+  const restored = normalizeWeeklyMenuRecord(saved, collections, saved.weekStart);
+  assert.equal(restored.dayProtections[4].manual, false);
+});
+
+test("固定ボタン由来のmanualだけがリロードと週移動後も復元される", () => {
+  const explicitlyLocked = setManualProtection(none(), 4, true);
+  const saved = record({ dayProtections: explicitlyLocked });
+  const afterReload = normalizeWeeklyMenuRecord(JSON.parse(JSON.stringify(saved)), collections, saved.weekStart);
+  const afterWeekReturn = normalizeWeeklyMenuRecord(afterReload, collections, saved.weekStart);
+  assert.equal(afterReload.dayProtections[4].manual, true);
+  assert.equal(afterReload.dayProtections[4].manualSource, "button");
+  assert.equal(afterWeekReturn.dayProtections[4].manual, true);
+});
+
+test("希望読み込みはrequestedだけをtrueにしmanual固定にしない", () => {
+  const protections = reconcileRequestedProtections(none(), [4]);
+  assert.deepEqual(protections[4], { manual: false, requested: true });
+});
+
+test("外食日を明示的に通常献立へ戻してもmanual固定は発生しない", () => {
+  const protections = none();
+  const result = replaceMenuDay([null, "b", "c", "d", "e", "f", "g"], 0, "a", {
+    dayProtections: protections,
+    allowProtectedOverride: true
+  });
+  assert.equal(result.changed, true);
+  assert.equal(result.selection[0], "a");
+  assert.equal(normalizeDayProtections(protections)[0].manual, false);
 });

@@ -755,7 +755,7 @@ function render() {
           <strong>外食・サボり日</strong>
           <small>今日は作らなくてOK</small>
         </div>
-        <button class="retry" type="button" data-index="${index}" disabled>↻ 献立を入れる</button>
+        <button class="retry" type="button" data-restore-eating-out="${index}" ${weeklyMenuLocked ? "disabled" : ""}>↻ 献立を入れる</button>
       </article>`;
     }
     const menu = recipeById(menus, menuId);
@@ -1053,6 +1053,11 @@ list.addEventListener("click", (event) => {
     notify(`${days[index]}曜日の固定を${willLock ? "設定" : "解除"}しました`);
     return;
   }
+  const restoreEatingOutButton = event.target.closest("[data-restore-eating-out]");
+  if (restoreEatingOutButton) {
+    restoreEatingOutDay(Number(restoreEatingOutButton.dataset.restoreEatingOut));
+    return;
+  }
   const removeSideButton = event.target.closest("[data-remove-side]");
   if (removeSideButton) {
     const index = Number(removeSideButton.dataset.removeSide);
@@ -1214,6 +1219,38 @@ function shuffleOneDay(index) {
   saveWeeklyMenu();
   render();
   notify(`${days[index]}曜日の献立を変えました`);
+  return true;
+}
+
+function restoreEatingOutDay(index) {
+  if (weeklyMenuLocked || selected[index] !== null) return false;
+  const replacement = randomMenu(
+    [selected[index - 1], selected[index + 1]].filter(value => value !== undefined),
+    budgetMode,
+    selected.filter((_, day) => day !== index),
+    preferredVegetables,
+    requestedConditions[index]
+  );
+  if (replacement === null) {
+    notify("この条件で選べる料理がありません");
+    return false;
+  }
+  const result = replaceMenuDay(selected, index, replacement, {
+    dayProtections,
+    consecutiveRecipeIds: consecutiveIds,
+    allowProtectedOverride: true
+  });
+  selected = result.selection;
+  selectedSides[index] = randomSideDish(
+    selectedSides.filter((_, day) => day !== index),
+    preferredVegetables,
+    recipeById(menus, replacement)
+  );
+  selectedSoups[index] = randomSoup(index);
+  additionalSideIds[index] = [];
+  saveWeeklyMenu();
+  renderKeepingScrollPosition();
+  notify(`${days[index]}曜日に献立を入れました`);
   return true;
 }
 
@@ -1929,7 +1966,6 @@ document.querySelector("#main-dish-search-results").addEventListener("click", ev
   if (!replacementRecipe) return;
   const index = dayChangeIndex;
   selected[index] = replacement;
-  dayProtections = setManualProtection(dayProtections, index, true);
   const sideReplacement = randomSideDish(selectedSides.filter((_, day) => day !== index), preferredVegetables, replacementRecipe);
   if (sideReplacement !== null) selectedSides[index] = sideReplacement;
   const soupReplacement = randomSoup(index);
@@ -1937,7 +1973,7 @@ document.querySelector("#main-dish-search-results").addEventListener("click", ev
   saveWeeklyMenu();
   mainDishPickerDialog.close();
   render();
-  notify(`${days[index]}曜日を「${replacementRecipe.main}」に変更し、固定しました`);
+  notify(`${days[index]}曜日を「${replacementRecipe.main}」に変更しました`);
 });
 
 document.querySelector("#side-dish-search-input").addEventListener("input", renderSideDishSearchResults);

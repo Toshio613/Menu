@@ -8,12 +8,17 @@ export function createDayProtections() {
   return Array.from({ length: MENU_DAYS_COUNT }, emptyProtection);
 }
 
-export function normalizeDayProtections(value, legacyManualDays = []) {
+export function normalizeDayProtections(value) {
   const hasDayProtections = Array.isArray(value) && value.length === MENU_DAYS_COUNT;
-  return Array.from({ length: MENU_DAYS_COUNT }, (_, index) => ({
-    manual: hasDayProtections ? value[index]?.manual === true : legacyManualDays[index] === true,
-    requested: hasDayProtections && value[index]?.requested === true
-  }));
+  return Array.from({ length: MENU_DAYS_COUNT }, (_, index) => {
+    const saved = hasDayProtections ? value[index] : null;
+    const manual = saved?.manual === true && saved?.manualSource === "button";
+    return {
+      manual,
+      requested: saved?.requested === true,
+      ...(manual ? { manualSource: "button" } : {})
+    };
+  });
 }
 
 export function manualProtectionDays(protections) {
@@ -23,7 +28,12 @@ export function manualProtectionDays(protections) {
 export function setManualProtection(protections, dayIndex, manual) {
   const next = normalizeDayProtections(protections);
   if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex >= MENU_DAYS_COUNT) return next;
-  next[dayIndex] = { ...next[dayIndex], manual: manual === true };
+  next[dayIndex] = {
+    ...next[dayIndex],
+    manual: manual === true,
+    ...(manual === true ? { manualSource: "button" } : {})
+  };
+  if (!manual) delete next[dayIndex].manualSource;
   return next;
 }
 

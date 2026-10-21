@@ -175,3 +175,32 @@ test("D1移行済み端末はログイン後のD1配列順で旧インデック�
   assert.equal(afterLogin.status, "migrated");
   assert.deepEqual(afterLogin.data["2026-10-19"].mainRecipeIds.slice(0, 2), ["main-a", "main-b"]);
 });
+
+test("曖昧な旧固定フラグを解除する前に専用バックアップを保存する", () => {
+  const ambiguous = {
+    version: MENU_DATA_VERSION,
+    weekStart: "2026-10-19",
+    mainRecipeIds: ["main-a", "main-b", null, null, null, null, null],
+    sideRecipeIds: Array(7).fill(null),
+    soupRecipeIds: Array(7).fill(null),
+    additionalSideIds: Array.from({ length: 7 }, () => []),
+    dayProtections: Array.from({ length: 7 }, (_, index) => ({
+      manual: index === 1,
+      requested: false
+    })),
+    manuallySelectedDays: [false, true, false, false, false, false, false],
+    locked: false
+  };
+  const raw = JSON.stringify({ "2026-10-19": ambiguous });
+  const storage = memoryStorage({
+    weeklyMenus: raw,
+    menuDataVersion: String(MENU_DATA_VERSION),
+    menuMigrationBackup_v1: "existing-backup"
+  });
+  const result = migrateWeeklyMenuStorage(storage, collections);
+
+  assert.equal(result.status, "migrated");
+  assert.equal(result.data["2026-10-19"].dayProtections[1].manual, false);
+  assert.equal(JSON.parse(storage.getItem("menuManualProtectionBackup_v2")).weeklyMenus, raw);
+  assert.equal(storage.getItem("menuMigrationBackup_v1"), "existing-backup");
+});

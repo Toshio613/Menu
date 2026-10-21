@@ -132,7 +132,12 @@ export function isMenuDayProtected(recipeId, manuallySelected = false) {
 export function mergeProtectedMenuDays(previous, generated, dayProtections = [], weeklyLocked = false) {
   const legacyManualDays = Array.isArray(dayProtections)
     && dayProtections.every(item => typeof item === "boolean") ? dayProtections : [];
-  const normalized = normalizeDayProtections(legacyManualDays.length ? null : dayProtections, legacyManualDays);
+  const normalized = normalizeDayProtections(legacyManualDays.length
+    ? Array.from({ length: 7 }, (_, index) => {
+      const manual = legacyManualDays[index] === true;
+      return { manual, requested: false, ...(manual ? { manualSource: "button" } : {}) };
+    })
+    : dayProtections);
   return generated.map((value, dayIndex) =>
     isDayProtected(dayProtectionState(previous[dayIndex], normalized[dayIndex], weeklyLocked))
       ? previous[dayIndex]
@@ -147,7 +152,10 @@ export function replaceMenuDay(selection, dayIndex, recipeId, {
   allowProtectedOverride = false
 } = {}) {
   const next = [...selection];
-  const normalized = normalizeDayProtections(dayProtections, manuallySelectedDays);
+  const normalized = normalizeDayProtections(dayProtections || Array.from({ length: 7 }, (_, index) => {
+    const manual = manuallySelectedDays[index] === true;
+    return { manual, requested: false, ...(manual ? { manualSource: "button" } : {}) };
+  }));
   if (!allowProtectedOverride
     && isDayProtected(dayProtectionState(next[dayIndex], normalized[dayIndex], weeklyLocked))) {
     return { selection: next, changed: false };

@@ -10,11 +10,15 @@ const validFixedDays = value => Array.isArray(value) && value.length === 7
   && value.every(item => typeof item === "boolean");
 const validDayProtections = value => Array.isArray(value) && value.length === 7
   && value.every(item => item && typeof item === "object" && !Array.isArray(item)
-    && typeof item.manual === "boolean" && typeof item.requested === "boolean");
+    && typeof item.manual === "boolean" && typeof item.requested === "boolean"
+    && (item.manualSource === undefined || item.manualSource === "button"));
 
-function normalizeDayProtections(value, manuallySelectedDays) {
-  if (value === undefined) return manuallySelectedDays.map(manual => ({ manual, requested: false }));
-  return value.map(item => ({ manual: item.manual, requested: item.requested }));
+function normalizeDayProtections(value) {
+  if (value === undefined) return Array.from({ length: 7 }, () => ({ manual: false, requested: false }));
+  return value.map(item => {
+    const manual = item.manual === true && item.manualSource === "button";
+    return { manual, requested: item.requested, ...(manual ? { manualSource: "button" } : {}) };
+  });
 }
 
 export function normalizeWeeklyMenu(value, weekStart) {
@@ -27,7 +31,7 @@ export function normalizeWeeklyMenu(value, weekStart) {
     || (value?.dayProtections !== undefined && !validDayProtections(value.dayProtections))
     || typeof value?.locked !== "boolean"
     || (value?.unlock !== undefined && typeof value.unlock !== "boolean")) return null;
-  const dayProtections = normalizeDayProtections(value.dayProtections, value.manuallySelectedDays);
+  const dayProtections = normalizeDayProtections(value.dayProtections);
   return { weekStart, mainRecipeIds: value.mainRecipeIds, sideRecipeIds: value.sideRecipeIds,
     soupRecipeIds: value.soupRecipeIds, additionalSideIds: value.additionalSideIds,
     dayProtections, manuallySelectedDays: dayProtections.map(item => item.manual), locked: value.locked,

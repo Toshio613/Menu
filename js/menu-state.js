@@ -6,7 +6,8 @@ const DEFAULT_KEYS = {
   weeks: "weeklyMenus",
   legacyWeek: "weeklyMenu",
   version: "menuDataVersion",
-  backup: "menuMigrationBackup_v1"
+  backup: "menuMigrationBackup_v1",
+  manualProtectionBackup: "menuManualProtectionBackup_v2"
 };
 
 function isPlainObject(value) {
@@ -59,7 +60,9 @@ export function normalizeWeeklyMenuRecord(record, collections, weekKey = record?
     sideIds
   );
   if (!mainRecipeIds || !sideRecipeIds || !soupRecipeIds || !additionalSideIds) return null;
-  const dayProtections = normalizeDayProtections(record.dayProtections, record.manuallySelectedDays);
+  // 旧manuallySelectedDaysは「希望」や料理選択でもtrueになっていたため、
+  // ユーザーが固定ボタンを押した証拠としては使わない。
+  const dayProtections = normalizeDayProtections(record.dayProtections);
   return {
     version: MENU_DATA_VERSION,
     weekStart: weekKey,
@@ -134,6 +137,26 @@ export function hasLegacyWeeklyMenuData(raw) {
   }
 }
 
+function hasUnverifiedManualProtection(raw) {
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    const records = isPlainObject(parsed) && typeof parsed.weekStart !== "string"
+      ? Object.values(parsed)
+      : [parsed];
+    return records.some(record => {
+      if (!isPlainObject(record)) return false;
+      if (isSevenItemArray(record.dayProtections)) {
+        return record.dayProtections.some(item => item?.manual === true && item?.manualSource !== "button");
+      }
+      return isSevenItemArray(record.manuallySelectedDays)
+        && record.manuallySelectedDays.some(item => item === true);
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function migrateWeeklyMenuStorage(storage, collections, options = {}) {
   const keys = { ...DEFAULT_KEYS, ...(options.keys || {}) };
   const rawWeeks = storage.getItem(keys.weeks);
@@ -172,6 +195,13 @@ export function migrateWeeklyMenuStorage(storage, collections, options = {}) {
   if (!needsWrite) return { status: "current", data: source };
 
   try {
+    if (storage.getItem(keys.manualProtectionBackup) === null
+      && (hasUnverifiedManualProtection(rawWeeks) || hasUnverifiedManualProtection(rawLegacyWeek))) {
+      storage.setItem(keys.manualProtectionBackup, JSON.stringify({
+        weeklyMenus: rawWeeks,
+        weeklyMenu: rawLegacyWeek
+      }));
+    }
     if (storage.getItem(keys.backup) === null) {
       storage.setItem(keys.backup, JSON.stringify({
         weeklyMenus: rawWeeks,
